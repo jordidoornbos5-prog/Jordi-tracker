@@ -74,23 +74,32 @@ import os
 
 def extraheer_macros_met_ai(user_input):
     """Gestructureerde AI call naar Gemini om direct valide macro JSON terug te krijgen"""
+    # We importeren alles hier binnenin, zodat het nooit mis kan gaan met missende imports bovenin
+    import os
+    import json
+    import streamlit as st
+    from google import genai
+    from google.genai import types
+    from pydantic import BaseModel
+
     try:
         # Haal de API key op uit Streamlit Secrets
         raw_key = st.secrets.get("GEMINI_API_KEY")
         if not raw_key:
+            st.error("❌ Fout: GEMINI_API_KEY mist volledig in je Streamlit Secrets!")
             return None
         
         # Maak de sleutel schoon
         api_key = str(raw_key).strip().replace('"', '').replace("'", "")
         
-        # Dwing de SDK om de sleutel via de officiële omgevingsvariabele te lezen
+        # Zet de omgevingsvariabele voor de AQ. sleutel
         os.environ["GEMINI_API_KEY"] = api_key
         
-        # Initialiseer de client zonder argumenten, hij pakt nu automatisch de os.environ
+        # Initialiseer de client
         client = genai.Client()
         
-        # We dwingen Gemini om exact ons JSON format te volgen via Structured Outputs
-        class MaaltijdMacroDoel(types.BaseModel):
+        # Definieer het schema via Pydantic
+        class MaaltijdMacroDoel(BaseModel):
             kcal: int
             eiwit: int
             kh: int
@@ -114,9 +123,10 @@ def extraheer_macros_met_ai(user_input):
         )
         
         return json.loads(response.text)
+        
     except Exception as e:
-        # Dit zorgt ervoor dat we de ECHTE foutmelding op het scherm zien:
-        st.error(f"🚨 Live AI Verbindingsfout: {e}")
+        # Dit MOET nu wel op het scherm verschijnen als er iets misgaat inside de try
+        st.error(f"🚨 Raw AI Error: {e}")
         return None
         
        
