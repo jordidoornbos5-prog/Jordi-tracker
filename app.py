@@ -117,6 +117,7 @@ def extraheer_macros_met_ai(user_input):
     except Exception as e:
         # Dit zorgt ervoor dat we de ECHTE foutmelding op het scherm zien:
         st.error(f"🚨 Live AI Verbindingsfout: {e}")
+        return None
         
        
 
