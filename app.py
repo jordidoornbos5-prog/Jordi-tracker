@@ -47,25 +47,41 @@ totaal_bier_kcal = bier_flesjes * 125
 totaal_cheat_kcal = totaal_bier_kcal + pizza_kcal + overdag_kcal
 cheat_overschot = totaal_cheat_kcal - onderhoud_kcal
 
-# --- DYNAMISCHE WEKEN SELECTIE (ALTIJD VANAF WEEK 25) ---
-st.sidebar.header("📅 Selecteer Week")
-huidige_week = datetime.date.today().isocalendar()[1]
+# --- DYNAMISCHE JAAR & WEKEN SELECTIE (ALLEEN VERLEDEN) ---
+st.sidebar.header("📅 Selecteer Periode")
 
+vandaag = datetime.date.today()
+huidig_jaar = vandaag.year
+huidige_week = vandaag.isocalendar()[1]
+
+# Jaar selecteren (keuze uit huidige jaar en vorig jaar)
+geselecteerd_jaar = st.sidebar.selectbox("Kies Jaar:", [huidig_jaar, huidig_jaar - 1], index=0)
+
+# Bepaal tot welke week we mogen kijken
+if geselecteerd_jaar == huidig_jaar:
+    max_week = huidige_week
+else:
+    max_week = 52 # Als het een vorig jaar is, mag je alle 52 weken zien
+
+# Bouw de lijst met weken omgekeerd op (nieuwste bovenaan)
 weken_lijst = []
-for w in range(huidige_week, 24, -1):
-    if w == huidige_week:
+for w in range(max_week, 0, -1):
+    if geselecteerd_jaar == huidig_jaar and w == huidige_week:
         weken_lijst.append(f"Week {w} (Huidige week)")
     else:
         weken_lijst.append(f"Week {w}")
 
-geselecteerde_week = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
+geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
+
+# Maak een unieke sleutel voor de database combinatie (bijv: "2026_Week 28")
+db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
 
 # --- IN-MEMORY DATABASE SYSTEMEN ---
 if 'history_db' not in st.session_state:
     st.session_state['history_db'] = {}
 
-if geselecteerde_week not in st.session_state['history_db']:
-    st.session_state['history_db'][geselecteerde_week] = {
+if db_key not in st.session_state['history_db']:
+    st.session_state['history_db'][db_key] = {
         "trainingen": {dag: "Rustdag / Geen" for dag in dagen_van_de_week},
         "duur": {dag: 0 for dag in dagen_van_de_week},
         "voeding": {dag: "" for dag in dagen_van_de_week},
@@ -73,95 +89,10 @@ if geselecteerde_week not in st.session_state['history_db']:
         "kcal_inname": {dag: 0 for dag in dagen_van_de_week}
     }
 
-week_data = st.session_state['history_db'][geselecteerde_week]
+week_data = st.session_state['history_db'][db_key]
 
 # --- TABS ---
 tab1, tab2, tab3 = st.tabs(["📊 Wekelijks Dashboard", "💪 Log Trainingen", "🍏 Log Voeding"])
 
 with tab2:
-    st.subheader(f"💪 Trainingen loggen voor {geselecteerde_week}")
-    st.write("Pas hier de trainingen aan voor de geselecteerde week.")
-    
-    extra_verbrand_totaal = 0
-    
-    for dag in dagen_van_de_week:
-        col_d1, col_d2 = st.columns([2, 1])
-        with col_d1:
-            default_idx = list(met_values.keys()).index(week_data["trainingen"][dag])
-            week_data["trainingen"][dag] = st.selectbox(f"Training op {dag}:", list(met_values.keys()), index=default_idx, key=f"t_{geselecteerde_week}_{dag}")
-        with col_d2:
-            default_duur = int(week_data["duur"][dag])
-            week_data["duur"][dag] = st.number_input(f"Duur (min):", value=default_duur, step=5, key=f"d_{geselecteerde_week}_{dag}")
-        
-        # Bereken verbranding per dag
-        if week_data["trainingen"][dag] != "Rustdag / Geen":
-            met = met_values[week_data["trainingen"][dag]]
-            dag_verbranding = round((met * 3.5 * gewicht / 200) * week_data["duur"][dag])
-            extra_verbrand_totaal += dag_verbranding
-
-with tab3:
-    st.subheader(f"🍏 Voeding loggen voor {geselecteerde_week}")
-    
-    gekozen_dag = st.selectbox("Kies de dag waarvoor je eten wilt invullen of terugkijken:", dagen_van_de_week, key="food_day_selector")
-    st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week}**")
-    
-    # Haal opgeslagen data op of vul in
-    week_data["voeding"][gekozen_dag] = st.text_area("Typ hier in normaal Nederlands wat je die dag op hebt:", value=week_data["voeding"][gekozen_dag], key=f"food_{geselecteerde_week}_{gekozen_dag}")
-    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{geselecteerde_week}_{gekozen_dag}")
-    
-    st.write("---")
-    base_kcal = 627 if week_data["wrap_check"][gekozen_dag] else 0
-    
-    if week_data["voeding"][gekozen_dag] != "" and week_data["kcal_inname"][gekozen_dag] == 0:
-        week_data["kcal_inname"][gekozen_dag] = base_kcal + 1100 
-    elif week_data["voeding"][gekozen_dag] == "" and not week_data["wrap_check"][gekozen_dag]:
-        week_data["kcal_inname"][gekozen_dag] = 0
-    elif week_data["voeding"][gekozen_dag] == "" and week_data["wrap_check"][gekozen_dag]:
-        week_data["kcal_inname"][gekozen_dag] = 627
-        
-    week_data["kcal_inname"][gekozen_dag] = st.number_input("Totaal berekende kcal voor deze dag:", value=int(week_data["kcal_inname"][gekozen_dag]), key=f"kcal_val_{geselecteerde_week}_{gekozen_dag}")
-
-with tab1:
-    st.subheader(f"De Wekelijkse Balans ({geselecteerde_week})")
-    
-    doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
-    netto_week_tekort = doordeweeks_buffer - cheat_overschot
-    geschat_vetverlies = netto_week_tekort / 7000
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Totale Buffer (incl. sport)", f"-{doordeweeks_buffer} kcal")
-    with col2:
-        st.metric("Weekend Overschot", f"+{cheat_overschot} kcal")
-    with col3:
-        st.metric("Netto Weekresultaat", f"-{netto_week_tekort} kcal", delta=f"{geschat_vetverlies:.2f} kg vet/week")
-
-    st.markdown("### 🗓️ Weekoverzicht & Werkelijke Inname")
-    
-    kcal_doel_lijst = []
-    kcal_werkelijk_lijst = []
-    status_lijst = []
-    t_lijst = []
-    
-    for dag in dagen_van_de_week:
-        t_lijst.append(week_data["trainingen"][dag])
-        kcal_werkelijk_lijst.append(week_data["kcal_inname"][dag])
-        if dag == cheat_dag:
-            kcal_doel_lijst.append(totaal_cheat_kcal)
-            status_lijst.append("🍺 Cheatday")
-        else:
-            kcal_doel_lijst.append(doel_kcal)
-            status_lijst.append("⚡ Strak Tekort")
-            
-    df_week = pd.DataFrame({
-        "Dag": dagen_van_de_week,
-        "Doel Inname (kcal)": kcal_doel_lijst,
-        "Werkelijke Inname (kcal)": kcal_werkelijk_lijst,
-        "Gekozen Training": t_lijst,
-        "Status": status_lijst
-    })
-    st.dataframe(df_week, use_container_width=True)
-    
-    totaal_doel_week = sum(kcal_doel_lijst)
-    totaal_werkelijk_week = sum(kcal_werkelijk_lijst)
-    st.info(f"📊 **Doel inname deze week:** {totaal_doel_week} kcal | **Jouw ingevoerde inname:** {totaal_werkelijk_week} kcal")
+    st.subheader(f"💪 Trainingen loggen voor {geselecteerde_week_naam} ({
