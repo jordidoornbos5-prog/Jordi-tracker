@@ -66,21 +66,12 @@ else:
 # Bouw de lijst met weken omgekeerd op (nieuwste bovenaan)
 weken_lijst = []
 for w in range(max_week, 0, -1):
-    if geselecteerd_jaar == huidig_jaar and w == historische_week: # kleine veiligheidsslag
+    if geselecteerd_jaar == huidig_jaar and w == huidige_week:
         weken_lijst.append(f"Week {w} (Huidige week)")
     else:
         weken_lijst.append(f"Week {w}")
 
-# Zorg dat de lijst correct geladen wordt
-weken_clean = [w.replace(" (Huidige week)", "") for w in weken_lijst]
-weken_display = []
-for w in weken_clean:
-    if int(w) == huidige_week and geselecteerd_jaar == huidig_jaar:
-        weken_display.append(f"Week {w} (Huidige week)")
-    else:
-        weken_display.append(f"Week {w}")
-
-geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_display, index=0)
+geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 
 # Maak een unieke sleutel voor de database combinatie
 db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
@@ -127,5 +118,12 @@ with tab2:
 with tab3:
     st.subheader(f"🍏 Voeding loggen voor {geselecteerde_week_naam} ({geselecteerd_jaar})")
     
-    gekozen_dag = st.selectbox("Kies de dag waarvoor je eten wilt invullen of terugkijken:", dagen_van_de
+    gekozen_dag = st.selectbox("Kies de dag waarvoor je eten wilt invullen of terugkijken:", dagen_van_de_week, key="food_day_selector")
+    st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week_naam}** ({geselecteerd_jaar})")
     
+    # Haal opgeslagen data op of vul in
+    week_data["voeding"][gekozen_dag] = st.text_area("Typ hier in normaal Nederlands wat je die dag op hebt:", value=week_data["voeding"][gekozen_dag], key=f"food_{db_key}_{gekozen_dag}")
+    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
+    
+    st.write("---")
+    base_kcal = 627 if week_data["wrap_check"]
