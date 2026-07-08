@@ -14,11 +14,12 @@ st.markdown("""
     .macro-text { font-size: 12px; color: #6B7280; }
     .protein-success { background-color: #D1FAE5; color: #065F46; padding: 10px; border-radius: 8px; font-weight: bold; text-align: center; margin-top: 10px; }
     .protein-warning { background-color: #FEE2E2; color: #991B1B; padding: 10px; border-radius: 8px; font-weight: bold; text-align: center; margin-top: 10px; }
+    .weight-card { background-color: #EFF6FF; padding: 15px; border-radius: 10px; border-left: 5px solid #3B82F6; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">🏋️‍♂️ Jordi\'s AI Performance Dashboard</div>', unsafe_allow_html=True)
-st.markdown('<div class="subheader">Beheer je doordeweekse tekort, trainingen, eiwitdoelen en je weekend budget.</div>', unsafe_allow_html=True)
+st.markdown('<div class="subheader">Beheer je doordeweekse tekort, trainingen, gewichtsverloop en automatische eiwitkoppeling.</div>', unsafe_allow_html=True)
 
 # MET-waarden voor trainingen
 met_values = {
@@ -29,17 +30,12 @@ met_values = {
     "Keeperstraining (Matig intensief)": 5.0,
     "Voetbaltraining (Kelderklasse / Rustig)": 4.5
 }
-gewicht = 85 
 
 # --- SIDEBAR: INSTELLINGEN ---
 st.sidebar.header("🎯 Jouw Basis Profiel")
 onderhoud_kcal = st.sidebar.number_input("Onderhoudsbehoefte (kcal/dag)", value=2500, step=50)
 doel_tekort = st.sidebar.slider("Doordeweeks Doel Tekort (kcal)", 500, 1000, 800)
 doel_kcal = onderhoud_kcal - doel_tekort
-
-# NIEUW: Eiwitdoel instellen in de sidebar (bijv. 2g per kg voor een sporter van 85kg = 170g)
-st.sidebar.header("🧬 Macro Doelen")
-doel_eiwit = st.sidebar.slider("Dagelijks Eiwit Doel (g)", 100, 220, 170, step=5)
 
 st.sidebar.header("🍺 Weekend Cheat Day")
 dagen_van_de_week = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"]
@@ -78,6 +74,7 @@ if 'history_db' not in st.session_state:
 
 if db_key not in st.session_state['history_db']:
     st.session_state['history_db'][db_key] = {
+        "gewicht": 85.0, # Standaard gewicht per week als startwaarde
         "trainingen": {dag: "Rustdag / Geen" for dag in dagen_van_de_week},
         "duur": {dag: 0 for dag in dagen_van_de_week},
         "maaltijden_lijst": {dag: [] for dag in dagen_van_de_week},
@@ -86,16 +83,23 @@ if db_key not in st.session_state['history_db']:
 
 week_data = st.session_state['history_db'][db_key]
 
+# Upgrade database-structuren voor achterwaartse compatibiliteit
+if "gewicht" not in week_data:
+    week_data["gewicht"] = 85.0
 if "maaltijden_lijst" not in week_data:
     week_data["maaltijden_lijst"] = {dag: [] for dag in dagen_van_de_week}
 if "wrap_check" not in week_data:
     week_data["wrap_check"] = {dag: False for dag in dagen_van_de_week}
 
+# KOPPELING: Eiwitdoel is automatisch 2x het wekelijkse gewicht
+gewicht = week_data["gewicht"]
+doel_eiwit = int(gewicht * 2)
+
 # --- TABS ---
 tab1, tab2, tab3 = st.tabs(["📊 Wekelijks Dashboard", "💪 Log Trainingen", "🍏 Log Voeding"])
 
 with tab2:
-    st.subheader(f"💪 Trainingen loggen voor {geselecteerde_week_naam}")
+    st.subheader(f"💪 Trainingen loggen for {geselecteerde_week_naam}")
     extra_verbrand_totaal = 0
     for dag in dagen_van_de_week:
         col_d1, col_d2 = st.columns([2, 1])
@@ -139,7 +143,6 @@ with tab3:
         
     if voeg_toe and ai_input:
         text_lower = ai_input.lower()
-        
         kcal, eiwit, kh, vet = 350, 15, 40, 10
         
         if "kwark" in text_lower:
@@ -173,11 +176,10 @@ with tab3:
 
     # --- MAALTIJDEN OVERZICHT PER DAG ---
     st.write("### 📋 Log van vandaag")
-    huidrige_maaltijden = week_data["maaltijden_lijst"][gekozen_dag]
+    huidige_maaltijden = week_data["maaltijden_lijst"][gekozen_dag]
     
     tabel_kcal, tabel_eiwit, tabel_kh, tabel_vet = 0, 0, 0, 0
-    
-    for index, m in enumerate(huidrige_maaltijden):
+    for index, m in enumerate(huidige_maaltijden):
         m_kcal = m.get("Kcal", 0)
         m_eiwit = m.get("Eiwit", 0)
         m_kh = m.get("Kh", 0)
@@ -214,7 +216,6 @@ with tab3:
     totaal_dag_kh = int(tabel_kh + wrap_kh)
     totaal_dag_vet = int(tabel_vet + wrap_vet)
     
-    # Prachtige macro metrics balk onderaan de dag
     st.write("### 📊 Totaal berekende macro's vandaag:")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("🔥 Calorieën", f"{totaal_dag_kcal} kcal")
@@ -222,15 +223,33 @@ with tab3:
     c3.metric("🍞 Koolhydraten", f"{totaal_dag_kh}g")
     c4.metric("🥑 Vetten", f"{totaal_dag_vet}g")
 
-    # VISUELE EIWIT TRACKER (DYNAMISCHE STATUSMELDING)
     if totaal_dag_eiwit >= doel_eiwit:
-        st.markdown(f'<div class="protein-success">🎉 Eiwitdoel behaald! Je zit op {totaal_dag_eiwit}g (Doel: {doel_eiwit}g). Top voor herstel!</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="protein-success">🎉 Eiwitdoel behaald! Je zit op {totaal_dag_eiwit}g (Automatisch doel op basis van gewicht: {doel_eiwit}g).</div>', unsafe_allow_html=True)
     else:
         tekort = doel_eiwit - totaal_dag_eiwit
-        st.markdown(f'<div class="protein-warning">⚠️ Je hebt nog {tekort}g eiwit nodig om je doel van {doel_eiwit}g te halen vandáág!</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="protein-warning">⚠️ Je hebt nog {tekort}g eiwit nodig om je doel van {doel_eiwit}g te halen vandaag.</div>', unsafe_allow_html=True)
 
 with tab1:
     st.subheader(f"De Wekelijkse Balans ({geselecteerde_week_naam})")
+    
+    # NIEUW: Gewicht invoerbox bovenaan het wekelijkse dashboard
+    st.markdown(f"""
+    <div class="weight-card">
+        ⚖️ <b>Gewichts- & Progressie Tracker</b><br>
+        Vul hier je weegmoment in voor <b>{geselecteerde_week_naam}</b>. Je gekoppelde eiwitdoel voor deze week stelt zich automatisch in op 2g per kg (<b>{doel_eiwit}g</b>).
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # De gewicht-knop/invoer per week
+    week_data["gewicht"] = st.number_input(
+        "Mijn gewicht deze week (kg):", 
+        min_value=50.0, 
+        max_value=150.0, 
+        value=float(week_data["gewicht"]), 
+        step=0.1, 
+        key=f"weight_input_{db_key}"
+    )
+    st.write("---")
     
     doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
     netto_week_tekort = doordeweeks_buffer - cheat_overschot
@@ -241,7 +260,7 @@ with tab1:
     with col2: st.metric("Weekend Overschot", f"+{cheat_overschot} kcal")
     with col3: st.metric("Netto Weekresultaat", f"-{netto_week_tekort} kcal", delta=f"{geschat_vetverlies:.2f} kg vet/week")
 
-    st.markdown("### 🗓️ Weekoverzicht & Eiwit Tracker Status")
+    st.markdown("### 🗓️ Weekoverzicht, Gewicht & Eiwit Status")
     
     kcal_doel_lijst, kcal_werkelijk_lijst, status_lijst = [], [], []
     eiwit_lijst = []
@@ -257,7 +276,6 @@ with tab1:
         
         kcal_werkelijk_lijst.append(int(tabel_kcal_dag + wrap_kcal_dag))
         
-        # Eiwitstatus opbouwen met een indicator-emoji
         totaal_eiwit_dag = int(tabel_eiwit_dag + wrap_eiwit_dag)
         if totaal_eiwit_dag >= doel_eiwit:
             eiwit_lijst.append(f"🟢 {totaal_eiwit_dag}g (Behaald)")
@@ -279,3 +297,4 @@ with tab1:
         "Status": status_lijst
     })
     st.dataframe(df_week, use_container_width=True)
+    st.caption(f"Huidig geregistreerd gewicht voor deze week: **{week_data['gewicht']} kg**.")
