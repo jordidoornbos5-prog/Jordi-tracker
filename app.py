@@ -8,11 +8,10 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
-st.set_page_config(page_title="Jordi's Performance Tracker", layout="centered")
+st.set_page_config(page_title="Jordi's Performance Tracker", layout="wide")
 
-# --- DATABASE & SESSION STATE INITIALISATIE ---
 if 'history_db' not in st.session_state:
-    st.session_state['history_db'] = {} # Fallback naar leeg dictionary
+    st.session_state['history_db'] = {}
 
 conn = st.connection("local_db", type="sql")
 with conn.session as session:
@@ -26,7 +25,78 @@ def load_all_data():
     except:
         return {}
 
+def save_week_data(key, data):
+    with conn.session as session:
+        session.execute(
+            text("INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)"),
+            {"key": key, "json": json.dumps(data)}
+        )
+        session.commit()
+
 st.session_state['history_db'] = load_all_data()
+
+def extraheer_macros_met_ai(user_input):
+    try:
+        raw_key = st.secrets.get("GEMINI_API_KEY")
+        if not raw_key: return None
+        os.environ["GEMINI_API_KEY"] = str(raw_key).strip().replace('"', '').replace("'", "")
+        client = genai.Client()
+        class Maaltijd(BaseModel):
+            kcal: int
+            eiwit: int
+            kh: int
+            vet: int
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=f"Schat macro's voor: {user_input}. Geef JSON: kcal, eiwit, kh, vet.",
+            config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=Maaltijd)
+        )
+        return json.loads(response.text)
+    except Exception as e:
+        st.error(f"AI Error: {e}")
+        return None
+
+vandaag = datetime.date.today()
+huidig_jaar, huidige_week = vandaag.year, vandaag.isocalendar()[1]
+
+st.sidebar.header("Periode")
+geselecteerd_jaar = st.sidebar.selectbox("Jaar:", [huidig_jaar, huidig_jaar-1])
+weken_lijst = [f"Week {w}" for w in range(52, 0, -1)]
+geselecteerde_week_naam = st.sidebar.selectbox("Week:", weken_lijst)
+db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
+
+if db_key not in st.session_state['history_db']:
+    st.session_state['history_db'][db_key] = {
+        "maaltijden": {d: [] for d in ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"]},
+        "trainingen": []
+    }
+
+week_data = st.session_state['history_db'][db_key]
+
+tab1, tab2, tab3 = st.tabs(["Dashboard", "Voeding", "Training"])
+
+with tab2:
+    dag = st.selectbox("Dag:", ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"])
+    input_text = st.text_input("Wat gegeten?")
+    if st.button("Bereken"):
+        res = extraheer_macros_met_ai(input_text)
+        if res:
+            week_data["maaltijden"][dag].append({"Item": input_text, **res})
+            save_week_data(db_key, week_data)
+            st.rerun()
+    for i, m in enumerate(week_data["maaltijden"][dag]):
+        st.write(f"{m['Item']}: {m['kcal']}kcal, Eiwit: {m['eiwit']}g")
+
+with tab3:
+    t_naam = st.text_input("Training:")
+    if st.button("Toevoegen"):
+        week_data["trainingen"].append(t_naam)
+        save_week_data(db_key, week_data)
+        st.rerun()
+    st.write("Trainingen:", week_data["trainingen"])
+
+with tab1:
+    st.write(f"Data voor {geselecteerde_week_naam} geladen.")
 
 # Custom Styling
 st.markdown("""
