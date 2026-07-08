@@ -66,7 +66,6 @@ def save_week_data(key, data):
         )
         session.commit()
 
-if 'history_db' not in st.session_state:
     st.session_state['history_db'] = load_all_data()
 
 # --- AI INTEGRATIE (GOOGLE GEMINI) ---
