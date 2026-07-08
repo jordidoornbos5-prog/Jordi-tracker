@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import json
+from sqlalchemy import text  # Nodig voor SQLAlchemy 2.0+
 
 st.set_page_config(page_title="Jordi's Voedings & Trainings Tracker", layout="centered", page_icon="🏋️‍♂️")
 
@@ -32,18 +33,10 @@ met_values = {
     "Voetbaltraining (Kelderklasse / Rustig)": 4.5
 }
 
-import streamlit as st
-import pandas as pd
-import datetime
-import json
-from sqlalchemy import text  # <-- NIEUW: Nodig voor SQLAlchemy 2.0+
-
-# ... (De rest van je custom styling en MET-waarden blijft gewoon hetzelfde)
-
 # --- PERMANENTE DATABASE FUNCTIES ---
 conn = st.connection("local_db", type="sql")
 
-# GECORRIGEERD: text() toegevoegd rondom de SQL queries
+# Maak de database tabel aan met text()
 with conn.session as session:
     session.execute(text("""
         CREATE TABLE IF NOT EXISTS tracker_data (
@@ -56,31 +49,20 @@ with conn.session as session:
 def load_all_data():
     """Haalt alle opgeslagen data op uit de permanente database"""
     try:
-        # GECORRIGEERD: text() toegevoegd voor de SELECT query
         df = conn.query(text("SELECT * FROM tracker_data"), ttl=0)
         db_dict = {}
         for index, row in df.iterrows():
             db_dict[row['key']] = json.loads(row['json_payload'])
         return db_dict
-    except Exception as e:
+    except:
         return {}
 
 def save_week_data(key, data):
-    """Slaat de data van één specifieke week permanent op"""
+    """Slaat de data van één specifieke week permanent op met de juiste SQLAlchemy 2.0+ text()-methode"""
     json_string = json.dumps(data)
     with conn.session as session:
-        # GECORRIGEERD: text() toegevoegd voor de INSERT query
         session.execute(
             text("INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)"),
-            {"key": key, "json": json_string}
-        )
-        session.commit()
-def save_week_data(key, data):
-    """Slaat de data van één specifieke week permanent op"""
-    json_string = json.dumps(data)
-    with conn.session as session:
-        session.execute(
-            "INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)",
             {"key": key, "json": json_string}
         )
         session.commit()
@@ -160,14 +142,14 @@ with tab2:
             nieuwe_training = st.selectbox(f"Training op {dag}:", list(met_values.keys()), index=default_idx, key=f"t_{db_key}_{dag}")
             if nieuwe_training != week_data["trainingen"][dag]:
                 week_data["trainingen"][dag] = nieuwe_training
-                save_week_data(db_key, week_data) # Sla direct permanent op
+                save_week_data(db_key, week_data)
                 
         with col_d2:
             default_duur = int(week_data["duur"][dag])
             nieuwe_duur = st.number_input(f"Duur (min):", value=default_duur, step=5, key=f"d_{db_key}_{dag}")
             if nieuwe_duur != week_data["duur"][dag]:
                 week_data["duur"][dag] = nieuwe_duur
-                save_week_data(db_key, week_data) # Sla direct permanent op
+                save_week_data(db_key, week_data)
         
         if week_data["trainingen"][dag] != "Rustdag / Geen":
             met = met_values[week_data["trainingen"][dag]]
@@ -180,7 +162,7 @@ with tab3:
     gekozen_dag = st.selectbox("Kies de dag:", dagen_van_de_week, key="food_day_selector")
     st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week_naam}**")
     
-    # Snelkoppeling voor de wrap met automatische save
+    # Snelkoppeling voor de wrap
     oude_wrap = week_data["wrap_check"][gekozen_dag]
     week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal | 40g Eiwit)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
     if oude_wrap != week_data["wrap_check"][gekozen_dag]:
@@ -221,7 +203,7 @@ with tab3:
             "Type": gekozen_type, "Omschrijving": ai_input, "Kcal": int(kcal), "Eiwit": int(eiwit), "Kh": int(kh), "Vet": int(vet)
         }
         week_data["maaltijden_lijst"][gekozen_dag].append(nieuwe_maaltijd)
-        save_week_data(db_key, week_data) # Sla direct permanent op
+        save_week_data(db_key, week_data)
         st.success(f"Toegevoegd! +{eiwit}g Eiwit")
         st.rerun()
 
@@ -255,7 +237,7 @@ with tab3:
         with col_m2:
             if st.button("🗑️", key=f"del_{db_key}_{gekozen_dag}_{index}"):
                 week_data["maaltijden_lijst"][gekozen_dag].pop(index)
-                save_week_data(db_key, week_data) # Sla direct permanent op
+                save_week_data(db_key, week_data)
                 st.rerun()
 
     wrap_kcal = 627 if week_data["wrap_check"][gekozen_dag] else 0
@@ -296,7 +278,7 @@ with tab1:
         "Mijn gewicht deze week (kg):", min_value=50.0, max_value=150.0, value=float(week_data["gewicht"]), step=0.1, key=f"weight_input_{db_key}"
     )
     if ouder_gewicht != week_data["gewicht"]:
-        save_week_data(db_key, week_data) # Sla direct permanent op
+        save_week_data(db_key, week_data)  # Hier gaat het nu ook vlekkeloos via de gecorrigeerde functie!
         st.rerun()
         
     st.write("---")
