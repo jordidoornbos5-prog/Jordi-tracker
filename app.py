@@ -26,7 +26,6 @@ met_values = {
     "Keeperstraining (Matig intensief)": 5.0,
     "Voetbaltraining (Kelderklasse / Rustig)": 4.5
 }
-}
 gewicht = 85 # Gemiddeld gewicht voor de formule
 
 # --- SIDEBAR: INSTELLINGEN ---
