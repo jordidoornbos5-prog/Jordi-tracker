@@ -135,26 +135,23 @@ with tab3:
     # Haal de huidige dataframe op voor deze specifieke dag
     current_df = week_data["maaltijden"][gekozen_dag]
     
-    # Configureer de kolommen voor invoer
+    # Configureer de kolommen voor invoer (Python 3.14 compatibel gemaakt met expliciete labels)
     edited_df = st.data_editor(
         current_df,
         column_config={
             "Type": st.column_config.SelectboxColumn(
-                "Type Maaltijd",
-                options=["Ontbijt", "Lunch", "Avondeten", "Snack"],
-                required=True,
+                label="Type Maaltijd",
+                options=["Ontbijt", "Lunch", "Avondeten", "Snack"]
             ),
             "Omschrijving": st.column_config.TextColumn(
-                "Wat heb je gegeten?",
-                placeholder="Bijv. Bak kwark, Kip met rijst...",
-                required=True,
+                label="Wat heb je gegeten?",
+                placeholder="Bijv. Bak kwark, Kip met rijst..."
             ),
             "Kcal": st.column_config.NumberColumn(
-                "Calorieën (kcal)",
+                label="Calorieën (kcal)",
                 min_value=0,
                 max_value=3000,
-                step=5,
-                required=True,
+                step=5
             ),
         },
         num_rows="dynamic",
