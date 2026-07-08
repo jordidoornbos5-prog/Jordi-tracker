@@ -2,11 +2,31 @@ import streamlit as st
 import pandas as pd
 import datetime
 import json
+import os
 from sqlalchemy import text
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
-st.set_page_config(page_title="Jordi's Voedings & Trainings Tracker", layout="centered", page_icon="🏋️‍♂️")
+st.set_page_config(page_title="Jordi's Performance Tracker", layout="wide")
+
+# --- DATABASE & SESSION STATE INITIALISATIE ---
+if 'history_db' not in st.session_state:
+    st.session_state['history_db'] = {} # Fallback naar leeg dictionary
+
+conn = st.connection("local_db", type="sql")
+with conn.session as session:
+    session.execute(text("CREATE TABLE IF NOT EXISTS tracker_data (key TEXT PRIMARY KEY, json_payload TEXT)"))
+    session.commit()
+
+def load_all_data():
+    try:
+        df = conn.query(text("SELECT * FROM tracker_data"), ttl=0)
+        return {row['key']: json.loads(row['json_payload']) for _, row in df.iterrows()}
+    except:
+        return {}
+
+st.session_state['history_db'] = load_all_data()
 
 # Custom Styling
 st.markdown("""
