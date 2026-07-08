@@ -2,101 +2,11 @@ import streamlit as st
 import pandas as pd
 import datetime
 import json
-import os
 from sqlalchemy import text
 from google import genai
 from google.genai import types
-from pydantic import BaseModel
 
-st.set_page_config(page_title="Jordi's Performance Tracker", layout="wide")
-
-if 'history_db' not in st.session_state:
-    st.session_state['history_db'] = {}
-
-conn = st.connection("local_db", type="sql")
-with conn.session as session:
-    session.execute(text("CREATE TABLE IF NOT EXISTS tracker_data (key TEXT PRIMARY KEY, json_payload TEXT)"))
-    session.commit()
-
-def load_all_data():
-    try:
-        df = conn.query(text("SELECT * FROM tracker_data"), ttl=0)
-        return {row['key']: json.loads(row['json_payload']) for _, row in df.iterrows()}
-    except:
-        return {}
-
-def save_week_data(key, data):
-    with conn.session as session:
-        session.execute(
-            text("INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)"),
-            {"key": key, "json": json.dumps(data)}
-        )
-        session.commit()
-
-st.session_state['history_db'] = load_all_data()
-
-def extraheer_macros_met_ai(user_input):
-    try:
-        raw_key = st.secrets.get("GEMINI_API_KEY")
-        if not raw_key: return None
-        os.environ["GEMINI_API_KEY"] = str(raw_key).strip().replace('"', '').replace("'", "")
-        client = genai.Client()
-        class Maaltijd(BaseModel):
-            kcal: int
-            eiwit: int
-            kh: int
-            vet: int
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=f"Schat macro's voor: {user_input}. Geef JSON: kcal, eiwit, kh, vet.",
-            config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=Maaltijd)
-        )
-        return json.loads(response.text)
-    except Exception as e:
-        st.error(f"AI Error: {e}")
-        return None
-
-vandaag = datetime.date.today()
-huidig_jaar, huidige_week = vandaag.year, vandaag.isocalendar()[1]
-
-st.sidebar.header("Periode")
-geselecteerd_jaar = st.sidebar.selectbox("Jaar:", [huidig_jaar, huidig_jaar-1])
-weken_lijst = [f"Week {w}" for w in range(52, 0, -1)]
-geselecteerde_week_naam = st.sidebar.selectbox("Week:", weken_lijst)
-db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
-
-if db_key not in st.session_state['history_db']:
-    st.session_state['history_db'][db_key] = {
-        "maaltijden": {d: [] for d in ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"]},
-        "trainingen": []
-    }
-
-week_data = st.session_state['history_db'][db_key]
-
-tab1, tab2, tab3 = st.tabs(["Dashboard", "Voeding", "Training"])
-
-with tab2:
-    dag = st.selectbox("Dag:", ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"])
-    input_text = st.text_input("Wat gegeten?")
-    if st.button("Bereken"):
-        res = extraheer_macros_met_ai(input_text)
-        if res:
-            week_data["maaltijden"][dag].append({"Item": input_text, **res})
-            save_week_data(db_key, week_data)
-            st.rerun()
-    for i, m in enumerate(week_data["maaltijden"][dag]):
-        st.write(f"{m['Item']}: {m['kcal']}kcal, Eiwit: {m['eiwit']}g")
-
-with tab3:
-    t_naam = st.text_input("Training:")
-    if st.button("Toevoegen"):
-        week_data["trainingen"].append(t_naam)
-        save_week_data(db_key, week_data)
-        st.rerun()
-    st.write("Trainingen:", week_data["trainingen"])
-
-with tab1:
-    st.write(f"Data voor {geselecteerde_week_naam} geladen.")
+st.set_page_config(page_title="Jordi's Voedings & Trainings Tracker", layout="centered", page_icon="🏋️‍♂️")
 
 # Custom Styling
 st.markdown("""
@@ -156,6 +66,7 @@ def save_week_data(key, data):
         )
         session.commit()
 
+if 'history_db' not in st.session_state:
     st.session_state['history_db'] = load_all_data()
 
 # --- AI INTEGRATIE (GOOGLE GEMINI) ---
@@ -163,32 +74,23 @@ import os
 
 def extraheer_macros_met_ai(user_input):
     """Gestructureerde AI call naar Gemini om direct valide macro JSON terug te krijgen"""
-    # We importeren alles hier binnenin, zodat het nooit mis kan gaan met missende imports bovenin
-    import os
-    import json
-    import streamlit as st
-    from google import genai
-    from google.genai import types
-    from pydantic import BaseModel
-
     try:
         # Haal de API key op uit Streamlit Secrets
         raw_key = st.secrets.get("GEMINI_API_KEY")
         if not raw_key:
-            st.error("❌ Fout: GEMINI_API_KEY mist volledig in je Streamlit Secrets!")
             return None
         
         # Maak de sleutel schoon
         api_key = str(raw_key).strip().replace('"', '').replace("'", "")
         
-        # Zet de omgevingsvariabele voor de AQ. sleutel
+        # Dwing de SDK om de sleutel via de officiële omgevingsvariabele te lezen
         os.environ["GEMINI_API_KEY"] = api_key
         
-        # Initialiseer de client
+        # Initialiseer de client zonder argumenten, hij pakt nu automatisch de os.environ
         client = genai.Client()
         
-        # Definieer het schema via Pydantic
-        class MaaltijdMacroDoel(BaseModel):
+        # We dwingen Gemini om exact ons JSON format te volgen via Structured Outputs
+        class MaaltijdMacroDoel(types.BaseModel):
             kcal: int
             eiwit: int
             kh: int
@@ -212,10 +114,9 @@ def extraheer_macros_met_ai(user_input):
         )
         
         return json.loads(response.text)
-        
     except Exception as e:
-        # Dit MOET nu wel op het scherm verschijnen als er iets misgaat inside de try
-        st.error(f"🚨 Raw AI Error: {e}")
+        # Dit zorgt ervoor dat we de ECHTE foutmelding op het scherm zien:
+        st.error(f"🚨 Live AI Verbindingsfout: {e}")
         return None
         
        
