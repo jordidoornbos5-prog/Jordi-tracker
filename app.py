@@ -74,9 +74,12 @@ def extraheer_macros_met_ai(user_input):
     """Gestructureerde AI call naar Gemini om direct valide macro JSON terug te krijgen"""
     try:
         # Haal de API key op uit Streamlit Secrets
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key:
+        raw_key = st.secrets.get("GEMINI_API_KEY")
+        if not raw_key:
             return None
+        
+        # Haal eventuele per ongeluk ingevoerde aanhalingstekens of spaties weg
+        api_key = str(raw_key).strip().replace('"', '').replace("'", "")
         
         client = genai.Client(api_key=api_key)
         
@@ -104,7 +107,6 @@ def extraheer_macros_met_ai(user_input):
             ),
         )
         
-        # Zet het resultaat om naar een Python dict
         return json.loads(response.text)
     except Exception as e:
         st.error(f"AI Foutje: {e}")
