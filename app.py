@@ -53,11 +53,13 @@ huidige_week = datetime.date.today().isocalendar()[1]
 
 # Maak automatisch een lijst van de huidige week helemaal terug tot en met week 25
 weken_lijst = []
-for w in range(huidige_week, 0, 0):
+for w in range(huidige_week, 24, -1):
     if w == huidige_week:
         weken_lijst.append(f"Week {w} (Huidige week)")
     else:
         weken_lijst.append(f"Week {w}")
+
+geselecteerde_week = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 
 geselecteerde_week = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 
