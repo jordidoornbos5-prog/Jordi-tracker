@@ -60,7 +60,7 @@ def load_all_data():
         return {}
 
 def save_week_data(key, data):
-    """Slaat data op in SQLite EN update direct de session_state."""
+    """Slaat data op in SQLite en forceert een update in de sessie."""
     json_string = json.dumps(data)
     with conn.session as session:
         session.execute(
@@ -68,6 +68,7 @@ def save_week_data(key, data):
             {"key": key, "json": json_string}
         )
         session.commit()
+    # Directe update van de actieve sessie
     st.session_state['history_db'][key] = data
 
 if 'history_db' not in st.session_state:
@@ -262,7 +263,6 @@ with tab3:
             week_data["maaltijden_lijst"][gekozen_dag].append(nieuwe_maaltijd)
             save_week_data(db_key, week_data)
             st.success(f"Toegevoegd via Gemini AI! +{resultaat['eiwit']}g Eiwit")
-            st.rerun()
         else:
             st.warning("Kon geen verbinding maken met de AI. Controleer of je de GEMINI_API_KEY correct hebt toegevoegd aan je Secrets.")
 
@@ -297,7 +297,6 @@ with tab3:
             if st.button("🗑️", key=f"del_{db_key}_{gekozen_dag}_{index}"):
                 week_data["maaltijden_lijst"][gekozen_dag].pop(index)
                 save_week_data(db_key, week_data)
-                st.rerun()
 
     wrap_kcal = 627 if week_data["wrap_check"][gekozen_dag] else 0
     wrap_eiwit = 40 if week_data["wrap_check"][gekozen_dag] else 0
@@ -338,7 +337,6 @@ with tab1:
     )
     if ouder_gewicht != week_data["gewicht"]:
         save_week_data(db_key, week_data)
-        st.rerun()
         
     st.write("---")
     
