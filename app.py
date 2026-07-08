@@ -59,7 +59,7 @@ geselecteerd_jaar = st.sidebar.selectbox("Kies Jaar:", [huidig_jaar, huidig_jaar
 
 # Bepaal tot welke week we mogen kijken
 if geselecteerd_jaar == huidig_jaar:
-    max_week = EEOC = huidige_week
+    max_week = huidige_week
 else:
     max_week = 52
 
@@ -90,7 +90,7 @@ if db_key not in st.session_state['history_db']:
 
 week_data = st.session_state['history_db'][db_key]
 
-# VEILIGHEIDS-CHECK: Als een oude sessie nog geen "maaltijden" tabel heeft, maak hem dan nu aan
+# VEILIGHEIDS-CHECK
 if "maaltijden" not in week_data:
     week_data["maaltijden"] = {dag: pd.DataFrame(columns=["Type", "Omschrijving", "Kcal"]) for dag in dagen_van_de_week}
 if "wrap_check" not in week_data:
@@ -197,7 +197,7 @@ with tab1:
     for dag in dagen_van_de_week:
         t_lijst.append(week_data["trainingen"][dag])
         
-        # Bereken de werkelijke inname per dag voor de hoofdtabel (met extra check)
+        # Bereken de werkelijke inname per dag voor de hoofdtabel
         if "maaltijden" in week_data and dag in week_data["maaltijden"]:
             df_dag = week_data["maaltijden"][dag]
             tabel_kcal_dag = df_dag["Kcal"].sum() if not df_dag.empty else 0
