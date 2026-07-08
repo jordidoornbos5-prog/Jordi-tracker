@@ -76,6 +76,9 @@ geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_l
 # Maak een unieke sleutel voor de database combinatie
 db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
 
+# Maak een blauwdruk voor een lege maaltijden-tabel met de juiste types
+LegeTabel = pd.DataFrame([{"Type": "Ontbijt", "Omschrijving": "", "Kcal": 0}]).iloc[0:0]
+
 # --- IN-MEMORY DATABASE SYSTEMEN ---
 if 'history_db' not in st.session_state:
     st.session_state['history_db'] = {}
@@ -84,7 +87,7 @@ if db_key not in st.session_state['history_db']:
     st.session_state['history_db'][db_key] = {
         "trainingen": {dag: "Rustdag / Geen" for dag in dagen_van_de_week},
         "duur": {dag: 0 for dag in dagen_van_de_week},
-        "maaltijden": {dag: pd.DataFrame(columns=["Type", "Omschrijving", "Kcal"]) for dag in dagen_van_de_week},
+        "maaltijden": {dag: LegeTabel.copy() for dag in dagen_van_de_week},
         "wrap_check": {dag: False for dag in dagen_van_de_week}
     }
 
@@ -92,7 +95,7 @@ week_data = st.session_state['history_db'][db_key]
 
 # VEILIGHEIDS-CHECK
 if "maaltijden" not in week_data:
-    week_data["maaltijden"] = {dag: pd.DataFrame(columns=["Type", "Omschrijving", "Kcal"]) for dag in dagen_van_de_week}
+    week_data["maaltijden"] = {dag: LegeTabel.copy() for dag in dagen_van_de_week}
 if "wrap_check" not in week_data:
     week_data["wrap_check"] = {dag: False for dag in dagen_van_de_week}
 
@@ -130,30 +133,14 @@ with tab3:
     week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
     
     st.write("### 🍴 Maaltijden Log")
-    st.caption("Klik op ➕ onderaan de tabel om een nieuwe maaltijd toe te voegen. Selecteer een rij en druk op Delete om iets te verwijderen.")
+    st.caption("Klik op ➕ onderaan de tabel om een nieuwe maaltijd toe te voegen. Selecteer een rij en klik links op het cijfer om hem met Delete te verwijderen.")
     
     # Haal de huidige dataframe op voor deze specifieke dag
     current_df = week_data["maaltijden"][gekozen_dag]
     
-    # Configureer de kolommen voor invoer (Python 3.14 compatibel gemaakt met expliciete labels)
+    # Python 3.14 veilige data editor zonder handmatige column_config aanroepen
     edited_df = st.data_editor(
         current_df,
-        column_config={
-            "Type": st.column_config.SelectboxColumn(
-                label="Type Maaltijd",
-                options=["Ontbijt", "Lunch", "Avondeten", "Snack"]
-            ),
-            "Omschrijving": st.column_config.TextColumn(
-                label="Wat heb je gegeten?",
-                placeholder="Bijv. Bak kwark, Kip met rijst..."
-            ),
-            "Kcal": st.column_config.NumberColumn(
-                label="Calorieën (kcal)",
-                min_value=0,
-                max_value=3000,
-                step=5
-            ),
-        },
         num_rows="dynamic",
         use_container_width=True,
         key=f"editor_{db_key}_{gekozen_dag}"
