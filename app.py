@@ -70,6 +70,8 @@ if 'history_db' not in st.session_state:
     st.session_state['history_db'] = load_all_data()
 
 # --- AI INTEGRATIE (GOOGLE GEMINI) ---
+import os
+
 def extraheer_macros_met_ai(user_input):
     """Gestructureerde AI call naar Gemini om direct valide macro JSON terug te krijgen"""
     try:
@@ -78,10 +80,14 @@ def extraheer_macros_met_ai(user_input):
         if not raw_key:
             return None
         
-        # Haal eventuele per ongeluk ingevoerde aanhalingstekens of spaties weg
+        # Maak de sleutel schoon
         api_key = str(raw_key).strip().replace('"', '').replace("'", "")
         
-        client = genai.Client(api_key=api_key)
+        # Dwing de SDK om de sleutel via de officiële omgevingsvariabele te lezen
+        os.environ["GEMINI_API_KEY"] = api_key
+        
+        # Initialiseer de client zonder argumenten, hij pakt nu automatisch de os.environ
+        client = genai.Client()
         
         # We dwingen Gemini om exact ons JSON format te volgen via Structured Outputs
         class MaaltijdMacroDoel(types.BaseModel):
