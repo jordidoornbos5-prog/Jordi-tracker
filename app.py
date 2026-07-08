@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import json
 
 st.set_page_config(page_title="Jordi's Voedings & Trainings Tracker", layout="centered", page_icon="🏋️‍♂️")
 
@@ -30,6 +31,45 @@ met_values = {
     "Keeperstraining (Matig intensief)": 5.0,
     "Voetbaltraining (Kelderklasse / Rustig)": 4.5
 }
+
+# --- PERMANENTE DATABASE FUNCTIES ---
+# We gebruiken SQL-connection van Streamlit om data permanent te bewaren in een SQLite bestand
+conn = st.connection("local_db", type="sql")
+
+# Maak de database tabel aan als deze nog niet bestaat
+with conn.session as session:
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS tracker_data (
+            key TEXT PRIMARY KEY,
+            json_payload TEXT
+        )
+    """)
+    session.commit()
+
+def load_all_data():
+    """Haalt alle opgeslagen data op uit de permanente database"""
+    try:
+        df = conn.query("SELECT * FROM tracker_data", ttl=0)
+        db_dict = {}
+        for index, row in df.iterrows():
+            db_dict[row['key']] = json.loads(row['json_payload'])
+        return db_dict
+    except:
+        return {}
+
+def save_week_data(key, data):
+    """Slaat de data van één specifieke week permanent op"""
+    json_string = json.dumps(data)
+    with conn.session as session:
+        session.execute(
+            "INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)",
+            {"key": key, "json": json_string}
+        )
+        session.commit()
+
+# Laad de database in de session_state bij het opstarten
+if 'history_db' not in st.session_state:
+    st.session_state['history_db'] = load_all_data()
 
 # --- SIDEBAR: INSTELLINGEN ---
 st.sidebar.header("🎯 Jouw Basis Profiel")
@@ -68,13 +108,10 @@ for w in range(max_week, 0, -1):
 geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
 
-# --- IN-MEMORY DATABASE SYSTEMEN ---
-if 'history_db' not in st.session_state:
-    st.session_state['history_db'] = {}
-
+# Maak de week aan in het geheugen als deze nog niet bestaat
 if db_key not in st.session_state['history_db']:
     st.session_state['history_db'][db_key] = {
-        "gewicht": 85.0, # Standaard gewicht per week als startwaarde
+        "gewicht": 85.0,
         "trainingen": {dag: "Rustdag / Geen" for dag in dagen_van_de_week},
         "duur": {dag: 0 for dag in dagen_van_de_week},
         "maaltijden_lijst": {dag: [] for dag in dagen_van_de_week},
@@ -83,15 +120,12 @@ if db_key not in st.session_state['history_db']:
 
 week_data = st.session_state['history_db'][db_key]
 
-# Upgrade database-structuren voor achterwaartse compatibiliteit
-if "gewicht" not in week_data:
-    week_data["gewicht"] = 85.0
-if "maaltijden_lijst" not in week_data:
-    week_data["maaltijden_lijst"] = {dag: [] for dag in dagen_van_de_week}
-if "wrap_check" not in week_data:
-    week_data["wrap_check"] = {dag: False for dag in dagen_van_de_week}
+# Zorg voor achterwaartse compatibiliteit van sleutels
+if "gewicht" not in week_data: week_data["gewicht"] = 85.0
+if "maaltijden_lijst" not in week_data: week_data["maaltijden_lijst"] = {dag: [] for dag in dagen_van_de_week}
+if "wrap_check" not in week_data: week_data["wrap_check"] = {dag: False for dag in dagen_van_de_week}
 
-# KOPPELING: Eiwitdoel is automatisch 2x het wekelijkse gewicht
+# KOPPELING: Eiwitdoel
 gewicht = week_data["gewicht"]
 doel_eiwit = int(gewicht * 2)
 
@@ -99,16 +133,23 @@ doel_eiwit = int(gewicht * 2)
 tab1, tab2, tab3 = st.tabs(["📊 Wekelijks Dashboard", "💪 Log Trainingen", "🍏 Log Voeding"])
 
 with tab2:
-    st.subheader(f"💪 Trainingen loggen for {geselecteerde_week_naam}")
+    st.subheader(f"💪 Trainingen loggen voor {geselecteerde_week_naam}")
     extra_verbrand_totaal = 0
     for dag in dagen_van_de_week:
         col_d1, col_d2 = st.columns([2, 1])
         with col_d1:
             default_idx = list(met_values.keys()).index(week_data["trainingen"][dag])
-            week_data["trainingen"][dag] = st.selectbox(f"Training op {dag}:", list(met_values.keys()), index=default_idx, key=f"t_{db_key}_{dag}")
+            nieuwe_training = st.selectbox(f"Training op {dag}:", list(met_values.keys()), index=default_idx, key=f"t_{db_key}_{dag}")
+            if nieuwe_training != week_data["trainingen"][dag]:
+                week_data["trainingen"][dag] = nieuwe_training
+                save_week_data(db_key, week_data) # Sla direct permanent op
+                
         with col_d2:
             default_duur = int(week_data["duur"][dag])
-            week_data["duur"][dag] = st.number_input(f"Duur (min):", value=default_duur, step=5, key=f"d_{db_key}_{dag}")
+            nieuwe_duur = st.number_input(f"Duur (min):", value=default_duur, step=5, key=f"d_{db_key}_{dag}")
+            if nieuwe_duur != week_data["duur"][dag]:
+                week_data["duur"][dag] = nieuwe_duur
+                save_week_data(db_key, week_data) # Sla direct permanent op
         
         if week_data["trainingen"][dag] != "Rustdag / Geen":
             met = met_values[week_data["trainingen"][dag]]
@@ -121,8 +162,11 @@ with tab3:
     gekozen_dag = st.selectbox("Kies de dag:", dagen_van_de_week, key="food_day_selector")
     st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week_naam}**")
     
-    # Snelkoppeling voor de wrap
+    # Snelkoppeling voor de wrap met automatische save
+    oude_wrap = week_data["wrap_check"][gekozen_dag]
     week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal | 40g Eiwit)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
+    if oude_wrap != week_data["wrap_check"][gekozen_dag]:
+        save_week_data(db_key, week_data)
     
     st.write("---")
     st.markdown("### 🤖 Nieuwe Maaltijd Toevoegen")
@@ -147,30 +191,19 @@ with tab3:
         
         if "kwark" in text_lower:
             kcal, eiwit, kh, vet = 300, 42, 20, 1
-            if "banaan" in text_lower:
-                kcal += 100; kh += 23
-        elif "kip" in text_lower and "rijst" in text_lower:
-            kcal, eiwit, kh, vet = 650, 45, 75, 12
-        elif "wrap" in text_lower or "wraps" in text_lower:
-            kcal, eiwit, kh, vet = 550, 35, 50, 18
-        elif "lasagna" in text_lower:
-            kcal, eiwit, kh, vet = 750, 40, 65, 32
-        elif "tonijn" in text_lower:
-            kcal, eiwit, kh, vet = 350, 38, 5, 15
-        elif "shake" in text_lower or "whey" in text_lower:
-            kcal, eiwit, kh, vet = 200, 30, 3, 2
-        elif "ei" in text_lower or "eieren" in text_lower:
-            kcal, eiwit, kh, vet = 320, 24, 2, 22
+            if "banaan" in text_lower: kcal += 100; kh += 23
+        elif "kip" in text_lower and "rijst" in text_lower: kcal, eiwit, kh, vet = 650, 45, 75, 12
+        elif "wrap" in text_lower or "wraps" in text_lower: kcal, eiwit, kh, vet = 550, 35, 50, 18
+        elif "lasagna" in text_lower: kcal, eiwit, kh, vet = 750, 40, 65, 32
+        elif "tonijn" in text_lower: kcal, eiwit, kh, vet = 350, 38, 5, 15
+        elif "shake" in text_lower or "whey" in text_lower: kcal, eiwit, kh, vet = 200, 30, 3, 2
+        elif "ei" in text_lower or "eieren" in text_lower: kcal, eiwit, kh, vet = 320, 24, 2, 22
             
         nieuwe_maaltijd = {
-            "Type": gekozen_type, 
-            "Omschrijving": ai_input, 
-            "Kcal": int(kcal),
-            "Eiwit": int(eiwit),
-            "Kh": int(kh),
-            "Vet": int(vet)
+            "Type": gekozen_type, "Omschrijving": ai_input, "Kcal": int(kcal), "Eiwit": int(eiwit), "Kh": int(kh), "Vet": int(vet)
         }
         week_data["maaltijden_lijst"][gekozen_dag].append(nieuwe_maaltijd)
+        save_week_data(db_key, week_data) # Sla direct permanent op
         st.success(f"Toegevoegd! +{eiwit}g Eiwit")
         st.rerun()
 
@@ -204,6 +237,7 @@ with tab3:
         with col_m2:
             if st.button("🗑️", key=f"del_{db_key}_{gekozen_dag}_{index}"):
                 week_data["maaltijden_lijst"][gekozen_dag].pop(index)
+                save_week_data(db_key, week_data) # Sla direct permanent op
                 st.rerun()
 
     wrap_kcal = 627 if week_data["wrap_check"][gekozen_dag] else 0
@@ -224,7 +258,7 @@ with tab3:
     c4.metric("🥑 Vetten", f"{totaal_dag_vet}g")
 
     if totaal_dag_eiwit >= doel_eiwit:
-        st.markdown(f'<div class="protein-success">🎉 Eiwitdoel behaald! Je zit op {totaal_dag_eiwit}g (Automatisch doel op basis van gewicht: {doel_eiwit}g).</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="protein-success">🎉 Eiwitdoel behaald! Je zit op {totaal_dag_eiwit}g.</div>', unsafe_allow_html=True)
     else:
         tekort = doel_eiwit - totaal_dag_eiwit
         st.markdown(f'<div class="protein-warning">⚠️ Je hebt nog {tekort}g eiwit nodig om je doel van {doel_eiwit}g te halen vandaag.</div>', unsafe_allow_html=True)
@@ -232,7 +266,6 @@ with tab3:
 with tab1:
     st.subheader(f"De Wekelijkse Balans ({geselecteerde_week_naam})")
     
-    # NIEUW: Gewicht invoerbox bovenaan het wekelijkse dashboard
     st.markdown(f"""
     <div class="weight-card">
         ⚖️ <b>Gewichts- & Progressie Tracker</b><br>
@@ -240,15 +273,14 @@ with tab1:
     </div>
     """, unsafe_allow_html=True)
     
-    # De gewicht-knop/invoer per week
+    ouder_gewicht = week_data["gewicht"]
     week_data["gewicht"] = st.number_input(
-        "Mijn gewicht deze week (kg):", 
-        min_value=50.0, 
-        max_value=150.0, 
-        value=float(week_data["gewicht"]), 
-        step=0.1, 
-        key=f"weight_input_{db_key}"
+        "Mijn gewicht deze week (kg):", min_value=50.0, max_value=150.0, value=float(week_data["gewicht"]), step=0.1, key=f"weight_input_{db_key}"
     )
+    if ouder_gewicht != week_data["gewicht"]:
+        save_week_data(db_key, week_data) # Sla direct permanent op
+        st.rerun()
+        
     st.write("---")
     
     doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
