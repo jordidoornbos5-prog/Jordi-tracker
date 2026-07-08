@@ -8,7 +8,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
-st.set_page_config(page_title="Jordi's Performance Tracker", layout="wide")
+st.set_page_config(page_title="Jordi's Performance Tracker", layout="centered")
 
 # --- DATABASE & SESSION STATE INITIALISATIE ---
 if 'history_db' not in st.session_state:
