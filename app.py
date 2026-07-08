@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 import datetime
 import json
-from sqlalchemy import text  # Nodig voor SQLAlchemy 2.0+
+from sqlalchemy import text
+from google import genai
+from google.genai import types
 
 st.set_page_config(page_title="Jordi's Voedings & Trainings Tracker", layout="centered", page_icon="🏋️‍♂️")
 
@@ -36,7 +38,6 @@ met_values = {
 # --- PERMANENTE DATABASE FUNCTIES ---
 conn = st.connection("local_db", type="sql")
 
-# Maak de database tabel aan met text()
 with conn.session as session:
     session.execute(text("""
         CREATE TABLE IF NOT EXISTS tracker_data (
@@ -47,7 +48,6 @@ with conn.session as session:
     session.commit()
 
 def load_all_data():
-    """Haalt alle opgeslagen data op uit de permanente database"""
     try:
         df = conn.query(text("SELECT * FROM tracker_data"), ttl=0)
         db_dict = {}
@@ -58,7 +58,6 @@ def load_all_data():
         return {}
 
 def save_week_data(key, data):
-    """Slaat de data van één specifieke week permanent op met de juiste SQLAlchemy 2.0+ text()-methode"""
     json_string = json.dumps(data)
     with conn.session as session:
         session.execute(
@@ -67,9 +66,49 @@ def save_week_data(key, data):
         )
         session.commit()
 
-# Laad de database in de session_state bij het opstarten
 if 'history_db' not in st.session_state:
     st.session_state['history_db'] = load_all_data()
+
+# --- AI INTEGRATIE (GOOGLE GEMINI) ---
+def extraheer_macros_met_ai(user_input):
+    """Gestructureerde AI call naar Gemini om direct valide macro JSON terug te krijgen"""
+    try:
+        # Haal de API key op uit Streamlit Secrets
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if not api_key:
+            return None
+        
+        client = genai.Client(api_key=api_key)
+        
+        # We dwingen Gemini om exact ons JSON format te volgen via Structured Outputs
+        class MaaltijdMacroDoel(types.BaseModel):
+            kcal: int
+            eiwit: int
+            kh: int
+            vet: int
+
+        prompt = f"""
+        Analyseer de volgende maaltijd en schat zo nauwkeurig mogelijk de macro's (Calorieën, Eiwit in grammen, Koolhydraten in grammen, Vet in grammen).
+        Ga uit van standaard Nederlandse porties en voedingswaarden als er geen hoeveelheid bij staat.
+        
+        Maaltijd: "{user_input}"
+        """
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=MaaltijdMacroDoel,
+                temperature=0.1
+            ),
+        )
+        
+        # Zet het resultaat om naar een Python dict
+        return json.loads(response.text)
+    except Exception as e:
+        st.error(f"AI Foutje: {e}")
+        return None
 
 # --- SIDEBAR: INSTELLINGEN ---
 st.sidebar.header("🎯 Jouw Basis Profiel")
@@ -100,7 +139,7 @@ max_week = huidige_week if geselecteerd_jaar == huidig_jaar else 52
 
 weken_lijst = []
 for w in range(max_week, 0, -1):
-    if geselecteerd_jaar == huidig_jaar and w == huidige_week:
+    if geselecteerd_jaar == huidig_jaar and w == historische_week:
         weken_lijst.append(f"Week {w} (Huidige week)")
     else:
         weken_lijst.append(f"Week {w}")
@@ -108,7 +147,6 @@ for w in range(max_week, 0, -1):
 geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
 
-# Maak de week aan in het geheugen als deze nog niet bestaat
 if db_key not in st.session_state['history_db']:
     st.session_state['history_db'][db_key] = {
         "gewicht": 85.0,
@@ -120,12 +158,10 @@ if db_key not in st.session_state['history_db']:
 
 week_data = st.session_state['history_db'][db_key]
 
-# Zorg voor achterwaartse compatibiliteit van sleutels
 if "gewicht" not in week_data: week_data["gewicht"] = 85.0
 if "maaltijden_lijst" not in week_data: week_data["maaltijden_lijst"] = {dag: [] for dag in dagen_van_de_week}
 if "wrap_check" not in week_data: week_data["wrap_check"] = {dag: False for dag in dagen_van_de_week}
 
-# KOPPELING: Eiwitdoel
 gewicht = week_data["gewicht"]
 doel_eiwit = int(gewicht * 2)
 
@@ -162,14 +198,13 @@ with tab3:
     gekozen_dag = st.selectbox("Kies de dag:", dagen_van_de_week, key="food_day_selector")
     st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week_naam}**")
     
-    # Snelkoppeling voor de wrap
     oude_wrap = week_data["wrap_check"][gekozen_dag]
     week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal | 40g Eiwit)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
     if oude_wrap != week_data["wrap_check"][gekozen_dag]:
         save_week_data(db_key, week_data)
     
     st.write("---")
-    st.markdown("### 🤖 Nieuwe Maaltijd Toevoegen")
+    st.markdown("### 🤖 Live AI Maaltijd Scanner")
     
     gekozen_type = st.selectbox(
         "Wat voor soort maaltijd is dit?",
@@ -177,35 +212,33 @@ with tab3:
         key=f"type_sel_{db_key}_{gekozen_dag}"
     )
     
-    ai_input = st.text_input("Wat heb je gegeten? (AI rekent de macro's uit):", 
-                            placeholder="Bijv: '500g magere kwark' of 'Kipfilet met rijst en wraps'",
+    ai_input = st.text_input("Wat heb je gegeten? (Echte AI berekent alles):", 
+                            placeholder="Bijv: '200g biefstuk met 150g zilvervliesrijst en een lepel olijfolie'",
                             key=f"ai_in_{db_key}_{gekozen_dag}")
     
     col_btn1, col_btn2 = st.columns([1, 2])
     with col_btn1:
-        voeg_toe = st.button("✨ Voeg toe")
+        voeg_toe = st.button("✨ Bereken & Voeg toe")
         
     if voeg_toe and ai_input:
-        text_lower = ai_input.lower()
-        kcal, eiwit, kh, vet = 350, 15, 40, 10
+        with st.spinner("AI is ingrediënten aan het wegen... 🧠"):
+            resultaat = extraheer_macros_met_ai(ai_input)
         
-        if "kwark" in text_lower:
-            kcal, eiwit, kh, vet = 300, 42, 20, 1
-            if "banaan" in text_lower: kcal += 100; kh += 23
-        elif "kip" in text_lower and "rijst" in text_lower: kcal, eiwit, kh, vet = 650, 45, 75, 12
-        elif "wrap" in text_lower or "wraps" in text_lower: kcal, eiwit, kh, vet = 550, 35, 50, 18
-        elif "lasagna" in text_lower: kcal, eiwit, kh, vet = 750, 40, 65, 32
-        elif "tonijn" in text_lower: kcal, eiwit, kh, vet = 350, 38, 5, 15
-        elif "shake" in text_lower or "whey" in text_lower: kcal, eiwit, kh, vet = 200, 30, 3, 2
-        elif "ei" in text_lower or "eieren" in text_lower: kcal, eiwit, kh, vet = 320, 24, 2, 22
-            
-        nieuwe_maaltijd = {
-            "Type": gekozen_type, "Omschrijving": ai_input, "Kcal": int(kcal), "Eiwit": int(eiwit), "Kh": int(kh), "Vet": int(vet)
-        }
-        week_data["maaltijden_lijst"][gekozen_dag].append(nieuwe_maaltijd)
-        save_week_data(db_key, week_data)
-        st.success(f"Toegevoegd! +{eiwit}g Eiwit")
-        st.rerun()
+        if resultaat:
+            nieuwe_maaltijd = {
+                "Type": gekozen_type,
+                "Omschrijving": ai_input,
+                "Kcal": int(resultaat["kcal"]),
+                "Eiwit": int(resultaat["eiwit"]),
+                "Kh": int(resultaat["kh"]),
+                "Vet": int(resultaat["vet"])
+            }
+            week_data["maaltijden_lijst"][gekozen_dag].append(nieuwe_maaltijd)
+            save_week_data(db_key, week_data)
+            st.success(f"Toegevoegd via Gemini AI! +{resultaat['eiwit']}g Eiwit")
+            st.rerun()
+        else:
+            st.warning("Kon geen verbinding maken met de AI. Controleer of je de GEMINI_API_KEY correct hebt toegevoegd aan je Secrets.")
 
     # --- MAALTIJDEN OVERZICHT PER DAG ---
     st.write("### 📋 Log van vandaag")
@@ -278,7 +311,7 @@ with tab1:
         "Mijn gewicht deze week (kg):", min_value=50.0, max_value=150.0, value=float(week_data["gewicht"]), step=0.1, key=f"weight_input_{db_key}"
     )
     if ouder_gewicht != week_data["gewicht"]:
-        save_week_data(db_key, week_data)  # Hier gaat het nu ook vlekkeloos via de gecorrigeerde functie!
+        save_week_data(db_key, week_data)
         st.rerun()
         
     st.write("---")
