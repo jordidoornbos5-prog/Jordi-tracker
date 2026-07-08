@@ -116,7 +116,7 @@ def extraheer_macros_met_ai(user_input):
         return json.loads(response.text)
     except Exception as e:
         st.error(f"AI Foutje: {e}")
-        return None
+       
 
 # --- SIDEBAR: INSTELLINGEN ---
 st.sidebar.header("🎯 Jouw Basis Profiel")
