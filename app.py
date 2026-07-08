@@ -217,4 +217,63 @@ with tab3:
     totaal_dag_vet = int(tabel_vet + wrap_vet)
     
     # Prachtige macro metrics balk onderaan de dag
-    st.write("### 📊 Totaal
+    st.write("### 📊 Totaal berekende macro's vandaag:")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🔥 Calorieën", f"{totaal_dag_kcal} kcal")
+    c2.metric("🧬 Eiwitten", f"{totaal_dag_eiwit}g")
+    c3.metric("🍞 Koolhydraten", f"{totaal_dag_kh}g")
+    c4.metric("🥑 Vetten", f"{totaal_dag_vet}g")
+
+with tab1:
+    st.subheader(f"De Wekelijkse Balans ({geselecteerde_week_naam})")
+    
+    doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
+    netto_week_tekort = doordeweeks_buffer - cheat_overschot
+    geschat_vetverlies = netto_week_tekort / 7000
+    
+    col1, col2, col3 = st.columns(3)
+    with col1: st.metric("Totale Buffer (incl. sport)", f"-{doordeweeks_buffer} kcal")
+    with col2: st.metric("Weekend Overschot", f"+{cheat_overschot} kcal")
+    with col3: st.metric("Netto Weekresultaat", f"-{netto_week_tekort} kcal", delta=f"{geschat_vetverlies:.2f} kg vet/week")
+
+    st.markdown("### 🗓️ Weekoverzicht & Macro Verdeling")
+    
+    kcal_doel_lijst, kcal_werkelijk_lijst, status_lijst = [], [], []
+    eiwit_lijst, kh_lijst, vet_lijst = [], [], []
+    
+    for dag in dagen_van_de_week:
+        m_lijst = week_data["maaltijden_lijst"].get(dag, [])
+        
+        tabel_kcal_dag = sum([m.get("Kcal", 0) for m in m_lijst])
+        tabel_eiwit_dag = sum([m.get("Eiwit", 0) for m in m_lijst])
+        tabel_kh_dag = sum([m.get("Kh", 0) for m in m_lijst])
+        tabel_vet_dag = sum([m.get("Vet", 0) for m in m_lijst])
+        
+        w_check = week_data["wrap_check"].get(dag, False)
+        wrap_kcal_dag = 627 if w_check else 0
+        wrap_eiwit_dag = 40 if w_check else 0
+        wrap_kh_dag = 55 if w_check else 0
+        wrap_vet_dag = 25 if w_check else 0
+        
+        kcal_werkelijk_lijst.append(int(tabel_kcal_dag + wrap_kcal_dag))
+        eiwit_lijst.append(int(tabel_eiwit_dag + wrap_eiwit_dag))
+        kh_lijst.append(int(tabel_kh_dag + wrap_kh_dag))
+        vet_lijst.append(int(tabel_vet_dag + wrap_vet_dag))
+        
+        if dag == cheat_dag:
+            kcal_doel_lijst.append(totaal_cheat_kcal)
+            status_lijst.append("🍺 Cheatday")
+        else:
+            kcal_doel_lijst.append(doel_kcal)
+            status_lijst.append("⚡ Strak Tekort")
+            
+    df_week = pd.DataFrame({
+        "Dag": dagen_van_de_week,
+        "Doel (kcal)": kcal_doel_lijst,
+        "Inname (kcal)": kcal_werkelijk_lijst,
+        "🧬 Eiwit (g)": eiwit_lijst,
+        "🍞 Kh (g)": kh_lijst,
+        "🥑 Vet (g)": vet_lijst,
+        "Status": status_lijst
+    })
+    st.dataframe(df_week, use_container_width=True)
