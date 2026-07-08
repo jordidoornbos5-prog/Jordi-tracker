@@ -1,6 +1,3 @@
-import os
-
-streamlit_code_v3 = """
 import streamlit as st
 import pandas as pd
 import datetime
@@ -8,14 +5,14 @@ import datetime
 st.set_page_config(page_title="Jordi's Voedings & Trainings Tracker", layout="centered", page_icon="🏋️‍♂️")
 
 # Custom Styling
-st.markdown(\"\"\"
+st.markdown("""
 <style>
     .main-header { font-size: 24px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
     .subheader { font-size: 16px; color: #4B5563; margin-bottom: 20px; }
     .card { background-color: #F3F4F6; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #2563EB; }
     .metric-val { font-size: 22px; font-weight: bold; color: #111827; }
 </style>
-\"\"\", unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">🏋️‍♂️ Jordi\'s AI Performance Dashboard</div>', unsafe_allow_html=True)
 st.markdown('<div class="subheader">Beheer je doordeweekse tekort, trainingen en je weekend budget in één oogopslag.</div>', unsafe_allow_html=True)
@@ -49,7 +46,7 @@ totaal_bier_kcal = bier_flesjes * 125
 totaal_cheat_kcal = totaal_bier_kcal + pizza_kcal + overdag_kcal
 cheat_overschot = totaal_cheat_kcal - onderhoud_kcal
 
-# --- NIEUW: WEKEN SELECTIE (HISTORIE) ---
+# --- WEKEN SELECTIE (HISTORIE) ---
 st.sidebar.header("📅 Selecteer Week")
 huidige_week = datetime.date.today().isocalendar()[1]
 geselecteerde_week = st.sidebar.selectbox(
@@ -58,7 +55,7 @@ geselecteerde_week = st.sidebar.selectbox(
     index=0
 )
 
-# --- IN-MEMORY DATABASE SIMULATIE ---
+# --- IN-MEMORY DATABASE SYSTEMEN ---
 if 'history_db' not in st.session_state:
     st.session_state['history_db'] = {}
 
@@ -85,13 +82,10 @@ with tab2:
     for dag in dagen_van_de_week:
         col_d1, col_d2 = st.columns([2, 1])
         with col_d1:
-            # Vind de huidige index van de opgeslagen training om hem te tonen
             default_idx = list(met_values.keys()).index(week_data["trainingen"][dag])
             week_data["trainingen"][dag] = st.selectbox(f"Training op {dag}:", list(met_values.keys()), index=default_idx, key=f"t_{geselecteerde_week}_{dag}")
         with col_d2:
-            default_duur = int(week_data["duur"][dag]) if week_data["trainingen"][dag] != "Rustdag / Geen" and week_data["duur"][dag] == 0 else int(week_data["duur"][dag])
-            if week_data["trainingen"][dag] != "Rustdag / Geen" and default_duur == 0:
-                default_duur = 60
+            default_duur = int(week_data["duur"][dag])
             week_data["duur"][dag] = st.number_input(f"Duur (min):", value=default_duur, step=5, key=f"d_{geselecteerde_week}_{dag}")
         
         # Bereken verbranding per dag
@@ -103,34 +97,28 @@ with tab2:
 with tab3:
     st.subheader(f"🍏 Voeding loggen voor {geselecteerde_week}")
     
-    # Kies een specifieke dag uit de geselecteerde week om eten in te vullen
     gekozen_dag = st.selectbox("Kies de dag waarvoor je eten wilt invullen of terugkijken:", dagen_van_de_week)
-    
     st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week}**")
     
     # Haal opgeslagen data op of vul in
     week_data["voeding"][gekozen_dag] = st.text_area("Typ hier in normaal Nederlands wat je die dag op hebt:", value=week_data["voeding"][gekozen_dag], key=f"food_{geselecteerde_week}_{gekozen_dag}")
     week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{geselecteerde_week}_{gekozen_dag}")
     
-    # Handmatige of gesimuleerde kcal invoer totdat de echte API gekoppeld is
     st.write("---")
-    if week_data["voeding"][gekozen_dag] != "":
-        st.write("**Geregistreerde tekst van die dag:**")
-        st.caption(week_data["voeding"][gekozen_dag])
-    
     base_kcal = 627 if week_data["wrap_check"][gekozen_dag] else 0
-    # Simulatie van ingevulde waarde
+    
     if week_data["voeding"][gekozen_dag] != "" and week_data["kcal_inname"][gekozen_dag] == 0:
-        week_data["kcal_inname"][gekozen_dag] = base_kcal + 1100 # Schatting bij tekst
-    elif week_data["voeding"][gekozen_dag] == "":
-        week_data["kcal_inname"][gekozen_dag] = base_kcal
+        week_data["kcal_inname"][gekozen_dag] = base_kcal + 1100 
+    elif week_data["voeding"][gekozen_dag] == "" and not week_data["wrap_check"][gekozen_dag]:
+        week_data["kcal_inname"][gekozen_dag] = 0
+    elif week_data["voeding"][gekozen_dag] == "" and week_data["wrap_check"][gekozen_dag]:
+        week_data["kcal_inname"][gekozen_dag] = 627
         
-    week_data["kcal_inname"][gekozen_dag] = st.number_input("Totaal berekende kcal voor deze dag:", value=int(week_data["kcal_inname"][gekozen_dag]), key=f"kcal_val_{geselecteerde_week}_{gekozen_dag}")
+    week_data["kcal_inname"][geselecteerde_week + gekozen_dag] = st.number_input("Totaal berekende kcal voor deze dag:", value=int(week_data["kcal_inname"][gekozen_dag]), key=f"kcal_val_{geselecteerde_week}_{gekozen_dag}")
 
 with tab1:
     st.subheader(f"De Wekelijkse Balans ({geselecteerde_week})")
     
-    # Berekeningen op basis van 6 dagen tekort + 1 cheatday
     doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
     netto_week_tekort = doordeweeks_buffer - cheat_overschot
     geschat_vetverlies = netto_week_tekort / 7000
@@ -169,9 +157,6 @@ with tab1:
     })
     st.dataframe(df_week, use_container_width=True)
     
-    # Berekening werkelijk wekelijks tekort vs doel
     totaal_doel_week = sum(kcal_doel_lijst)
     totaal_werkelijk_week = sum(kcal_werkelijk_lijst)
-    
-    st.write(f"**Doel inname deze week:** {totaal_doel_week} kcal | **Werkelijke inname ingevoerd:** {totaal_werkelijk_week} kcal")
-
+    st.info(f"📊 **Doel inname deze week:** {totaal_doel_week} kcal | **Jouw ingevoerde inname:** {totaal_werkelijk_week} kcal")
