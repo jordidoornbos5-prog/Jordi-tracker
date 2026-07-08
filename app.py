@@ -59,7 +59,7 @@ geselecteerd_jaar = st.sidebar.selectbox("Kies Jaar:", [huidig_jaar, huidig_jaar
 
 # Bepaal tot welke week we mogen kijken
 if geselecteerd_jaar == huidig_jaar:
-    max_week = huidige_week
+    max_week = EEOC = huidige_week
 else:
     max_week = 52
 
@@ -84,12 +84,17 @@ if db_key not in st.session_state['history_db']:
     st.session_state['history_db'][db_key] = {
         "trainingen": {dag: "Rustdag / Geen" for dag in dagen_van_de_week},
         "duur": {dag: 0 for dag in dagen_van_de_week},
-        # Nu slaan we per dag een lijst van maaltijden op (als dicts)
         "maaltijden": {dag: pd.DataFrame(columns=["Type", "Omschrijving", "Kcal"]) for dag in dagen_van_de_week},
         "wrap_check": {dag: False for dag in dagen_van_de_week}
     }
 
 week_data = st.session_state['history_db'][db_key]
+
+# VEILIGHEIDS-CHECK: Als een oude sessie nog geen "maaltijden" tabel heeft, maak hem dan nu aan
+if "maaltijden" not in week_data:
+    week_data["maaltijden"] = {dag: pd.DataFrame(columns=["Type", "Omschrijving", "Kcal"]) for dag in dagen_van_de_week}
+if "wrap_check" not in week_data:
+    week_data["wrap_check"] = {dag: False for dag in dagen_van_de_week}
 
 # --- TABS ---
 tab1, tab2, tab3 = st.tabs(["📊 Wekelijks Dashboard", "💪 Log Trainingen", "🍏 Log Voeding"])
@@ -152,7 +157,7 @@ with tab3:
                 required=True,
             ),
         },
-        num_rows="dynamic", # Maakt toevoegen en verwijderen mogelijk!
+        num_rows="dynamic",
         use_container_width=True,
         key=f"editor_{db_key}_{gekozen_dag}"
     )
@@ -192,10 +197,14 @@ with tab1:
     for dag in dagen_van_de_week:
         t_lijst.append(week_data["trainingen"][dag])
         
-        # Bereken de werkelijke inname per dag voor de hoofdtabel
-        df_dag = week_data["maaltijden"][dag]
-        tabel_kcal_dag = df_dag["Kcal"].sum() if not df_dag.empty else 0
-        wrap_kcal_dag = 627 if week_data["wrap_check"][dag] else 0
+        # Bereken de werkelijke inname per dag voor de hoofdtabel (met extra check)
+        if "maaltijden" in week_data and dag in week_data["maaltijden"]:
+            df_dag = week_data["maaltijden"][dag]
+            tabel_kcal_dag = df_dag["Kcal"].sum() if not df_dag.empty else 0
+        else:
+            tabel_kcal_dag = 0
+            
+        wrap_kcal_dag = 627 if week_data.get("wrap_check", {}).get(dag, False) else 0
         kcal_werkelijk_lijst.append(int(tabel_kcal_dag + wrap_kcal_dag))
         
         if dag == cheat_dag:
