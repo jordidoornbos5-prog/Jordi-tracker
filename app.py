@@ -60,7 +60,6 @@ for w in range(huidige_week, 0, 0):
         weken_lijst.append(f"Week {w}")
 
 geselecteerde_week = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
-)
 
 # --- IN-MEMORY DATABASE SYSTEMEN ---
 if 'history_db' not in st.session_state:
