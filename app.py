@@ -61,19 +61,28 @@ geselecteerd_jaar = st.sidebar.selectbox("Kies Jaar:", [huidig_jaar, huidig_jaar
 if geselecteerd_jaar == huidig_jaar:
     max_week = huidige_week
 else:
-    max_week = 52 # Als het een vorig jaar is, mag je alle 52 weken zien
+    max_week = 52
 
 # Bouw de lijst met weken omgekeerd op (nieuwste bovenaan)
 weken_lijst = []
 for w in range(max_week, 0, -1):
-    if geselecteerd_jaar == huidig_jaar and w == huidige_week:
+    if geselecteerd_jaar == huidig_jaar and w == historische_week: # kleine veiligheidsslag
         weken_lijst.append(f"Week {w} (Huidige week)")
     else:
         weken_lijst.append(f"Week {w}")
 
-geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
+# Zorg dat de lijst correct geladen wordt
+weken_clean = [w.replace(" (Huidige week)", "") for w in weken_lijst]
+weken_display = []
+for w in weken_clean:
+    if int(w) == huidige_week and geselecteerd_jaar == huidig_jaar:
+        weken_display.append(f"Week {w} (Huidige week)")
+    else:
+        weken_display.append(f"Week {w}")
 
-# Maak een unieke sleutel voor de database combinatie (bijv: "2026_Week 28")
+geselecteerde_week_naam = st.sidebar.selectbox("Bekijk of bewerk week:", weken_display, index=0)
+
+# Maak een unieke sleutel voor de database combinatie
 db_key = f"{geselecteerd_jaar}_{geselecteerde_week_naam}"
 
 # --- IN-MEMORY DATABASE SYSTEMEN ---
@@ -95,4 +104,28 @@ week_data = st.session_state['history_db'][db_key]
 tab1, tab2, tab3 = st.tabs(["📊 Wekelijks Dashboard", "💪 Log Trainingen", "🍏 Log Voeding"])
 
 with tab2:
-    st.subheader(f"💪 Trainingen loggen voor {geselecteerde_week_naam} ({
+    st.subheader(f"💪 Trainingen loggen voor {geselecteerde_week_naam} ({geselecteerd_jaar})")
+    st.write("Pas hier de trainingen aan voor de geselecteerde week.")
+    
+    extra_verbrand_totaal = 0
+    
+    for dag in dagen_van_de_week:
+        col_d1, col_d2 = st.columns([2, 1])
+        with col_d1:
+            default_idx = list(met_values.keys()).index(week_data["trainingen"][dag])
+            week_data["trainingen"][dag] = st.selectbox(f"Training op {dag}:", list(met_values.keys()), index=default_idx, key=f"t_{db_key}_{dag}")
+        with col_d2:
+            default_duur = int(week_data["duur"][dag])
+            week_data["duur"][dag] = st.number_input(f"Duur (min):", value=default_duur, step=5, key=f"d_{db_key}_{dag}")
+        
+        # Bereken verbranding per dag
+        if week_data["trainingen"][dag] != "Rustdag / Geen":
+            met = met_values[week_data["trainingen"][dag]]
+            dag_verbranding = round((met * 3.5 * gewicht / 200) * week_data["duur"][dag])
+            extra_verbrand_totaal += dag_verbranding
+
+with tab3:
+    st.subheader(f"🍏 Voeding loggen voor {geselecteerde_week_naam} ({geselecteerd_jaar})")
+    
+    gekozen_dag = st.selectbox("Kies de dag waarvoor je eten wilt invullen of terugkijken:", dagen_van_de
+    
