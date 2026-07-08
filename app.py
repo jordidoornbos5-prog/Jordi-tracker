@@ -92,5 +92,3 @@ with tab3:
         st.markdown(f'<div class="card">🔥 Lekker gewerkt! Met je <b>{training_type}</b> training van {duur} minuten heb je naar schatting <b>{verbranding} calorieën</b> extra verbrand. Je spiermassa is weer optimaal geprikkeld voor herstel!</div>', unsafe_allow_html=True)
     else:
         st.info("Rustdag. Perfect om je spieren te laten groeien en herstellen met de juiste eiwitten!")
-app.py
-app.py weergeven.
