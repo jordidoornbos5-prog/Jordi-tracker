@@ -123,4 +123,63 @@ with tab3:
     
     # Haal opgeslagen data op of vul in
     week_data["voeding"][gekozen_dag] = st.text_area("Typ hier in normaal Nederlands wat je die dag op hebt:", value=week_data["voeding"][gekozen_dag], key=f"food_{db_key}_{gekozen_dag}")
-    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=
+    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
+    
+    st.write("---")
+    
+    # Correcte berekening van de calorieën per dag
+    base_kcal = 627 if week_data["wrap_check"][gekozen_dag] else 0
+    
+    if week_data["voeding"][gekozen_dag] != "" and week_data["kcal_inname"][gekozen_dag] == 0:
+        week_data["kcal_inname"][gekozen_dag] = base_kcal + 1100 
+    elif week_data["voeding"][gekozen_dag] == "" and not week_data["wrap_check"][gekozen_dag]:
+        week_data["kcal_inname"][gekozen_dag] = 0
+    elif week_data["voeding"][gekozen_dag] == "" and week_data["wrap_check"][gekozen_dag]:
+        week_data["kcal_inname"][gekozen_dag] = 627
+        
+    week_data["kcal_inname"][gekozen_dag] = st.number_input("Totaal berekende kcal voor deze dag:", value=int(week_data["kcal_inname"][gekozen_dag]), key=f"kcal_val_{db_key}_{gekozen_dag}")
+
+with tab1:
+    st.subheader(f"De Wekelijkse Balans ({geselecteerde_week_naam} - {geselecteerd_jaar})")
+    
+    doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
+    netto_week_tekort = doordeweeks_buffer - cheat_overschot
+    geschat_vetverlies = netto_week_tekort / 7000
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Totale Buffer (incl. sport)", f"-{doordeweeks_buffer} kcal")
+    with col2:
+        st.metric("Weekend Overschot", f"+{cheat_overschot} kcal")
+    with col3:
+        st.metric("Netto Weekresultaat", f"-{netto_week_tekort} kcal", delta=f"{geschat_vetverlies:.2f} kg vet/week")
+
+    st.markdown("### 🗓️ Weekoverzicht & Werkelijke Inname")
+    
+    kcal_doel_lijst = []
+    kcal_werkelijk_lijst = []
+    status_lijst = []
+    t_lijst = []
+    
+    for dag in dagen_van_de_week:
+        t_lijst.append(week_data["trainingen"][dag])
+        kcal_werkelijk_lijst.append(week_data["kcal_inname"][dag])
+        if dag == cheat_dag:
+            kcal_doel_lijst.append(totaal_cheat_kcal)
+            status_lijst.append("🍺 Cheatday")
+        else:
+            kcal_doel_lijst.append(doel_kcal)
+            status_lijst.append("⚡ Strak Tekort")
+            
+    df_week = pd.DataFrame({
+        "Dag": dagen_van_de_week,
+        "Doel Inname (kcal)": kcal_doel_lijst,
+        "Werkelijke Inname (kcal)": kcal_werkelijk_lijst,
+        "Gekozen Training": t_lijst,
+        "Status": status_lijst
+    })
+    st.dataframe(df_week, use_container_width=True)
+    
+    totaal_doel_week = sum(kcal_doel_lijst)
+    totaal_werkelijk_week = sum(kcal_werkelijk_lijst)
+    st.info(f"📊 **Doel inname deze week:** {totaal_doel_week} kcal | **Jouw ingevoerde inname:** {totaal_werkelijk_week} kcal")
