@@ -47,19 +47,16 @@ totaal_bier_kcal = bier_flesjes * 125
 totaal_cheat_kcal = totaal_bier_kcal + pizza_kcal + overdag_kcal
 cheat_overschot = totaal_cheat_kcal - onderhoud_kcal
 
-# --- NIEUW: DYNAMISCHE WEKEN SELECTIE (ALTIJD VANAF WEEK 25) ---
+# --- DYNAMISCHE WEKEN SELECTIE (ALTIJD VANAF WEEK 25) ---
 st.sidebar.header("📅 Selecteer Week")
 huidige_week = datetime.date.today().isocalendar()[1]
 
-# Maak automatisch een lijst van de huidige week helemaal terug tot en met week 25
 weken_lijst = []
 for w in range(huidige_week, 24, -1):
     if w == huidige_week:
         weken_lijst.append(f"Week {w} (Huidige week)")
     else:
         weken_lijst.append(f"Week {w}")
-
-geselecteerde_week = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 
 geselecteerde_week = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 
@@ -105,7 +102,7 @@ with tab2:
 with tab3:
     st.subheader(f"🍏 Voeding loggen voor {geselecteerde_week}")
     
-    gekozen_dag = st.selectbox("Kies de dag waarvoor je eten wilt invullen of terugkijken:", dagen_van_de_week)
+    gekozen_dag = st.selectbox("Kies de dag waarvoor je eten wilt invullen of terugkijken:", dagen_van_de_week, key="food_day_selector")
     st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week}**")
     
     # Haal opgeslagen data op of vul in
@@ -122,7 +119,7 @@ with tab3:
     elif week_data["voeding"][gekozen_dag] == "" and week_data["wrap_check"][gekozen_dag]:
         week_data["kcal_inname"][gekozen_dag] = 627
         
-    week_data["kcal_inname"][geselecteerde_week + gekozen_dag] = st.number_input("Totaal berekende kcal voor deze dag:", value=int(week_data["kcal_inname"][gekozen_dag]), key=f"kcal_val_{geselecteerde_week}_{gekozen_dag}")
+    week_data["kcal_inname"][gekozen_dag] = st.number_input("Totaal berekende kcal voor deze dag:", value=int(week_data["kcal_inname"][gekozen_dag]), key=f"kcal_val_{geselecteerde_week}_{gekozen_dag}")
 
 with tab1:
     st.subheader(f"De Wekelijkse Balans ({geselecteerde_week})")
