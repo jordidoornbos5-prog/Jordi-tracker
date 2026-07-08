@@ -180,4 +180,3 @@ with open("app.py", "w", encoding="utf-8") as f:
     f.write(streamlit_code_v3)
 
 print("V3 code compiled successfully!")
-"""
