@@ -17,13 +17,15 @@ st.markdown("""
 st.markdown('<div class="main-header">🏋️‍♂️ Jordi\'s AI Performance Dashboard</div>', unsafe_allow_html=True)
 st.markdown('<div class="subheader">Beheer je doordeweekse tekort, trainingen en je weekend budget in één oogopslag.</div>', unsafe_allow_html=True)
 
-# MET-waarden voor trainingen (verbranding berekening)
+# MET-waarden voor trainingen (aangepast aan werkelijke intensiteit)
 met_values = {
     "Rustdag / Geen": 0, 
     "Push (Borst, Schouders, Triceps)": 5.0, 
     "Pull (Rug, Biceps)": 5.0, 
     "Legs (Benen, Buik)": 6.5, 
-    "Cardio / Keepers-specifiek": 7.5
+    "Keeperstraining (Matig intensief)": 5.0,
+    "Voetbaltraining (Kelderklasse / Rustig)": 4.5
+}
 }
 gewicht = 85 # Gemiddeld gewicht voor de formule
 
@@ -46,13 +48,19 @@ totaal_bier_kcal = bier_flesjes * 125
 totaal_cheat_kcal = totaal_bier_kcal + pizza_kcal + overdag_kcal
 cheat_overschot = totaal_cheat_kcal - onderhoud_kcal
 
-# --- WEKEN SELECTIE (HISTORIE) ---
+# --- NIEUW: DYNAMISCHE WEKEN SELECTIE (ALTIJD VANAF WEEK 25) ---
 st.sidebar.header("📅 Selecteer Week")
 huidige_week = datetime.date.today().isocalendar()[1]
-geselecteerde_week = st.sidebar.selectbox(
-    "Bekijk of bewerk week:", 
-    [f"Week {huidige_week} (Huidige week)", f"Week {huidige_week-1}", f"Week {huidige_week-2}", f"Week {huidige_week-3}"],
-    index=0
+
+# Maak automatisch een lijst van de huidige week helemaal terug tot en met week 25
+weken_lijst = []
+for w in range(huidige_week, 0, 0):
+    if w == huidige_week:
+        weken_lijst.append(f"Week {w} (Huidige week)")
+    else:
+        weken_lijst.append(f"Week {w}")
+
+geselecteerde_week = st.sidebar.selectbox("Bekijk of bewerk week:", weken_lijst, index=0)
 )
 
 # --- IN-MEMORY DATABASE SYSTEMEN ---
