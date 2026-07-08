@@ -21,20 +21,33 @@ st.markdown("""
 
 # --- DATABASE FUNCTIES (STABIEL) ---
 conn = st.connection("local_db", type="sql")
+
+# Initialiseer tabel
 with conn.session as session:
     session.execute(text("CREATE TABLE IF NOT EXISTS tracker_data (key TEXT PRIMARY KEY, json_payload TEXT)"))
     session.commit()
 
+# Gebruik een directe query zonder dat Streamlit probeert het SQL-object te cachen
+def load_db_data():
+    try:
+        # We voeren de query uit en halen de data direct op in een dataframe
+        df = conn.query("SELECT * FROM tracker_data")
+        return {row['key']: json.loads(row['json_payload']) for _, row in df.iterrows()}
+    except:
+        return {}
+
 def save_to_db(key, data):
     st.session_state['history_db'][key] = data
     with conn.session as session:
-        session.execute(text("INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)"),
-                        {"key": key, "json": json.dumps(data)})
+        session.execute(
+            text("INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)"),
+            {"key": key, "json": json.dumps(data)}
+        )
         session.commit()
 
+# Initialiseer session_state
 if 'history_db' not in st.session_state:
-    df = conn.query(text("SELECT * FROM tracker_data"), ttl=0)
-    st.session_state['history_db'] = {row['key']: json.loads(row['json_payload']) for _, row in df.iterrows()}
+    st.session_state['history_db'] = load_db_data()
 
 # --- INSTELLINGEN & INITIALISATIE ---
 dagen = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"]
