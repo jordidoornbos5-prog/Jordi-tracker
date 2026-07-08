@@ -174,9 +174,4 @@ with tab1:
     totaal_werkelijk_week = sum(kcal_werkelijk_lijst)
     
     st.write(f"**Doel inname deze week:** {totaal_doel_week} kcal | **Werkelijke inname ingevoerd:** {totaal_werkelijk_week} kcal")
-"""
 
-with open("app.py", "w", encoding="utf-8") as f:
-    f.write(streamlit_code_v3)
-
-print("V3 code compiled successfully!")
