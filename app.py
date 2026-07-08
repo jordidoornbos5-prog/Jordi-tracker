@@ -1,11 +1,9 @@
-
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 st.set_page_config(page_title="Jordi's Voedings & Trainings Tracker", layout="centered", page_icon="🏋️‍♂️")
 
-# Custom Styling for Dark Theme
+# Custom Styling
 st.markdown("""
 <style>
     .main-header { font-size: 24px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
@@ -18,77 +16,107 @@ st.markdown("""
 st.markdown('<div class="main-header">🏋️‍♂️ Jordi\'s AI Performance Dashboard</div>', unsafe_allow_html=True)
 st.markdown('<div class="subheader">Beheer je doordeweekse tekort, trainingen en je weekend budget in één oogopslag.</div>', unsafe_allow_html=True)
 
-# Sidebar settings for configuration
+# MET-waarden voor trainingen (verbranding berekening)
+met_values = {
+    "Rustdag / Geen": 0, 
+    "Push (Borst, Schouders, Triceps)": 5.0, 
+    "Pull (Rug, Biceps)": 5.0, 
+    "Legs (Benen, Buik)": 6.5, 
+    "Cardio / Keepers-specifiek": 7.5
+}
+gewicht = 85 # Gemiddeld gewicht voor de formule
+
+# --- SIDEBAR: INSTELLINGEN ---
 st.sidebar.header("🎯 Jouw Basis Profiel")
 onderhoud_kcal = st.sidebar.number_input("Onderhoudsbehoefte (kcal/dag)", value=2500, step=50)
 doel_tekort = st.sidebar.slider("Doordeweeks Doel Tekort (kcal)", 500, 1000, 800)
 doel_kcal = onderhoud_kcal - doel_tekort
 
-st.sidebar.header("🍺 Weekend Cheat Day Instellingen")
-bier_flesjes = st.sidebar.number_input("Aantal flesjes Heineken", value=15, step=1)
-pizza_kcal = st.sidebar.number_input("Calorieën Pizza", value=950, step=50)
+st.sidebar.header("🍺 Weekend Cheat Day")
+dagen_van_de_week = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"]
+cheat_dag = st.sidebar.selectbox("Kies jouw Cheatday:", dagen_van_de_week, index=6)
 
-# Calculations for the weekly dashboard
-overdag_kcal = 1000 # Normaal overdag eiwitrijk eten op cheatday
+bier_flesjes = st.sidebar.number_input("Aantal flesjes Heineken op cheatday", value=15, step=1)
+pizza_kcal = st.sidebar.number_input("Calorieën Pizza / Cheatmeal", value=950, step=50)
+
+# Berekening cheatday calorieën
+overdag_kcal = 1000 
 totaal_bier_kcal = bier_flesjes * 125
 totaal_cheat_kcal = totaal_bier_kcal + pizza_kcal + overdag_kcal
 cheat_overschot = totaal_cheat_kcal - onderhoud_kcal
 
-# Tabs for layout
-tab1, tab2, tab3 = st.tabs(["📊 Wekelijks Dashboard", "🍏 Log Voeding", "💪 Log Training"])
+# --- TABS ---
+tab1, tab2, tab3 = st.tabs(["📊 Wekelijks Dashboard", "💪 Log Trainingen", "🍏 Log Voeding"])
+
+with tab2:
+    st.subheader("💪 Wat voor trainingen doe je deze week?")
+    st.write("Selecteer per dag wat je hebt gedaan en hoe lang. Dit verhoogt je wekelijkse calorieënbuffer!")
+    
+    trainingen_vandaag = {}
+    duur_vandaag = {}
+    extra_verbrand_totaal = 0
+    
+    # Maak handige kolommen voor de dagen van de week
+    for dag in dagen_van_de_week:
+        col_d1, col_d2 = st.columns([2, 1])
+        with col_d1:
+            trainingen_vandaag[dag] = st.selectbox(f"Training op {dag}:", list(met_values.keys()), key=f"t_{dag}")
+        with col_d2:
+            duur_vandaag[dag] = st.number_input(f"Duur (min):", value=60 if trainingen_vandaag[dag] != "Rustdag / Geen" else 0, step=5, key=f"d_{dag}")
+        
+        # Bereken verbranding per dag
+        if trainingen_vandaag[dag] != "Rustdag / Geen":
+            met = met_values[trainingen_vandaag[dag]]
+            dag_verbranding = round((met * 3.5 * gewicht / 200) * duur_vandaag[dag])
+            extra_verbrand_totaal += dag_verbranding
 
 with tab1:
     st.subheader("De Wekelijkse Balans")
     
-    # Simple simulated data state for 6 days
-    doordeweeks_buffer = doel_tekort * 6
+    # Berekeningen op basis van 6 dagen tekort + 1 cheatday
+    doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
     netto_week_tekort = doordeweeks_buffer - cheat_overschot
     geschat_vetverlies = netto_week_tekort / 7000
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Doordeweekse Buffer", f"-{doordeweeks_buffer} kcal")
+        st.metric("Totale Buffer (incl. sport)", f"-{doordeweeks_buffer} kcal")
     with col2:
         st.metric("Weekend Overschot", f"+{cheat_overschot} kcal")
     with col3:
         st.metric("Netto Weekresultaat", f"-{netto_week_tekort} kcal", delta=f"{geschat_vetverlies:.2f} kg vet/week")
 
-    st.markdown("### 🗓️ Weekoverzicht Planning")
-    dagen = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag (Cheatday)"]
-    kcal_lijst = [doel_kcal]*6 + [totaal_cheat_kcal]
-    status_lijst = ["⚡ Strak Tekort"]*6 + ["🍺 Cheatday"]
+    st.markdown("### 🗓️ Dynamisch Weekoverzicht")
     
+    # Bouw het weekoverzicht dynamisch op op basis van de gekozen cheatday
+    kcal_lijst = []
+    status_lijst = []
+    t_lijst = []
+    
+    for dag in dagen_van_de_week:
+        t_lijst.append(trainingen_vandaag[dag])
+        if dag == cheat_dag:
+            kcal_lijst.append(totaal_cheat_kcal)
+            status_lijst.append("🍺 Cheatday")
+        else:
+            kcal_lijst.append(doel_kcal)
+            status_lijst.append("⚡ Strak Tekort")
+            
     df_week = pd.DataFrame({
-        "Dag": dagen,
+        "Dag": dagen_van_de_week,
         "Geplande Inname (kcal)": kcal_lijst,
+        "Gekozen Training": t_lijst,
         "Status": status_lijst
     })
     st.dataframe(df_week, use_container_width=True)
-
-with tab2:
-    st.subheader("🍏 Wat heb je vandaag gegeten?")
-    food_input = st.text_area("Typ hier in normaal Nederlands wat je op hebt (bijv: 'Mijn ontbijt wrap en 's avonds bami met extra kip'):")
     
-    col_w1, col_w2 = st.columns(2)
-    with col_w1:
-        wrap_check = st.checkbox("Ik heb vandaag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)")
-    
-    if st.button("Reken maaltijden uit via AI"):
-        st.success("AI analyseert je input... (Dit koppel je morgen aan de echte Gemini API!)")
-        totaal_vandaag = 627 if wrap_check else 0
-        st.info(f"Huidige geregistreerde inname gebaseerd op selecties: **{totaal_vandaag} kcal**")
+    if extra_verbrand_totaal > 0:
+        st.success(f"🔥 Door je trainingen heb je deze week naar schatting **{extra_verbrand_totaal} kcal** extra verbrand! Je wekelijkse marge is hiermee flink vergroot.")
 
 with tab3:
-    st.subheader("💪 Training & Energieverbruik")
-    training_type = st.selectbox("Welke training heb je gedaan?", ["Geen / Rustdag", "Push (Borst, Schouders, Triceps)", "Pull (Rug, Biceps)", "Legs (Benen, Buik)", "Cardio / Keepers-specifiek"])
-    duur = st.slider("Duur van de training (minuten)", 30, 120, 60, step=5)
+    st.subheader("🍏 Log Voeding (AI)")
+    food_input = st.text_area("Typ hier in normaal Nederlands wat je vandaag op hebt:")
+    wrap_check = st.checkbox("Ik heb vandaag m've vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)")
     
-    # Calculate calories burned
-    met_values = {"Geen / Rustdag": 0, "Push (Borst, Schouders, Triceps)": 5.0, "Pull (Rug, Biceps)": 5.0, "Legs (Benen, Buik)": 6.5, "Cardio / Keepers-specifiek": 7.5}
-    gewicht = 85 # standard estimate for dynamic formula
-    verbranding = round((met_values[training_type] * 3.5 * gewicht / 200) * duur) if training_type != "Geen / Rustdag" else 0
-    
-    if training_type != "Geen / Rustdag":
-        st.markdown(f'<div class="card">🔥 Lekker gewerkt! Met je <b>{training_type}</b> training van {duur} minuten heb je naar schatting <b>{verbranding} calorieën</b> extra verbrand. Je spiermassa is weer optimaal geprikkeld voor herstel!</div>', unsafe_allow_html=True)
-    else:
-        st.info("Rustdag. Perfect om je spieren te laten groeien en herstellen met de juiste eiwitten!")
+    if st.button("Reken maaltijd uit"):
+        st.info("Sla dit op en we koppelen morgen de live AI-berekening!")
