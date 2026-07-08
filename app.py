@@ -11,16 +11,17 @@ st.markdown("""
     .subheader { font-size: 16px; color: #4B5563; margin-bottom: 20px; }
     .meal-card { background-color: #F9FAFB; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #10B981; display: flex; justify-content: space-between; align-items: center; }
     .meal-type { font-weight: bold; color: #2563EB; font-size: 14px; }
+    .macro-text { font-size: 12px; color: #6B7280; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">🏋️‍♂️ Jordi\'s AI Performance Dashboard</div>', unsafe_allow_html=True)
-st.markdown('<div class="subheader">Beheer je doordeweekse tekort, trainingen en je weekend budget in één oogopslag.</div>', unsafe_allow_html=True)
+st.markdown('<div class="subheader">Beheer je doordeweekse tekort, trainingen, macro\'s en je weekend budget.</div>', unsafe_allow_html=True)
 
 # MET-waarden voor trainingen
 met_values = {
     "Rustdag / Geen": 0, 
-    "Push (Borst, Schouders, Triceps)": 5.0, 
+    "Push (Borst, Shouders, Triceps)": 5.0, 
     "Pull (Rug, Biceps)": 5.0, 
     "Legs (Benen, Buik)": 6.5, 
     "Keeperstraining (Matig intensief)": 5.0,
@@ -73,13 +74,13 @@ if db_key not in st.session_state['history_db']:
     st.session_state['history_db'][db_key] = {
         "trainingen": {dag: "Rustdag / Geen" for dag in dagen_van_de_week},
         "duur": {dag: 0 for dag in dagen_van_de_week},
-        "maaltijden_lijst": {dag: [] for dag in dagen_van_de_week}, # Slaat maaltijden op als lijst van dicts
+        "maaltijden_lijst": {dag: [] for dag in dagen_van_de_week},
         "wrap_check": {dag: False for dag in dagen_van_de_week}
     }
 
 week_data = st.session_state['history_db'][db_key]
 
-# Zorg voor achterwaartse compatibiliteit van de database structuur
+# Upgrade database als er oude data in zit
 if "maaltijden_lijst" not in week_data:
     week_data["maaltijden_lijst"] = {dag: [] for dag in dagen_van_de_week}
 if "wrap_check" not in week_data:
@@ -106,119 +107,114 @@ with tab2:
             extra_verbrand_totaal += dag_verbranding
 
 with tab3:
-    st.subheader(f"🍏 Slim Voeding Loggen met AI")
+    st.subheader(f"🍏 Voeding & Macro's Loggen")
     
     gekozen_dag = st.selectbox("Kies de dag:", dagen_van_de_week, key="food_day_selector")
     st.info(f"Je bewerkt nu: **{gekozen_dag}** van **{geselecteerde_week_naam}**")
     
-    # Snelkoppeling voor de wrap
-    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
+    # Snelkoppeling voor de wrap (macro's hardcoded toegevoegd: ~40g eiwit, 55g kh, 25g vet)
+    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal | 40g Eiwit)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
     
     st.write("---")
-    st.markdown("### 🤖 Wat heb je gegeten?")
+    st.markdown("### 🤖 Nieuwe Maaltijd Toevoegen")
     
-    # AI Invoerbox
-    ai_input = st.text_input("Typ in normaal Nederlands wat en wanneer je hebt gegeten:", 
-                            placeholder="Bijv: 'Bak kwark met banaan als ontbijt' of 'Kip met rijst en broccoli als avondeten'",
+    gekozen_type = st.selectbox(
+        "Wat voor soort maaltijd is dit?",
+        ["Ontbijt", "Lunch", "Avondeten", "Snack"],
+        key=f"type_sel_{db_key}_{gekozen_dag}"
+    )
+    
+    ai_input = st.text_input("Wat heb je gegeten? (AI rekent de macro's uit):", 
+                            placeholder="Bijv: '500g magere kwark met banaan' of 'Kipfilet met rijst en wraps'",
                             key=f"ai_in_{db_key}_{gekozen_dag}")
     
     col_btn1, col_btn2 = st.columns([1, 2])
     with col_btn1:
-        voeg_toe = st.button("✨ Voeg toe via AI")
+        voeg_toe = st.button("✨ Voeg toe")
         
     if voeg_toe and ai_input:
         text_lower = ai_input.lower()
         
-        # 1. Bepaal automatisch het type maaltijd op basis van tekst
-        gekozen_type = "Snack"  # Default
-        if "ontbijt" in text_lower: gekozen_type = "Ontbijt"
-        elif "lunch" in text_lower: gekozen_type = "Lunch"
-        elif "avondeten" in text_lower or "diner" in text_lower or "warm" in text_lower: gekozen_type = "Avondeten"
+        # Standaard fallback macro's als er niks wordt herkend
+        kcal, eiwit, kh, vet = 350, 15, 40, 10
         
-        # 2. Slimme AI Calorieën schatting op basis van trefwoorden
-        geschatte_kcal = 350  # Standaard fallback kcal
-        if "kwark" in text_lower: geschatte_kcal = 400
-        if "banaan" in text_lower: geschatte_kcal += 100
-        if "kip" in text_lower and "rijst" in text_lower: geschatte_kcal = 650
-        if "wrap" in text_lower: geschatte_kcal = 500
-        if "ei" in text_lower or "eieren" in text_lower: geschatte_kcal = 300
-        if "shake" in text_lower or "whey" in text_lower: geschatte_kcal = 250
-        if "tonijn" in text_lower: geschatte_kcal = 350
-        if "lasagna" in text_lower: geschatte_kcal = 750
-        
-        # Voeg maaltijd toe aan de lijst van die dag
-        nieuwe_maaltijd = {"Type": gekozen_type, "Omschrijving": ai_input, "Kcal": geschatte_kcal}
+        # Uitgebreide AI Macro-schatting op basis van jouw specifieke sportvoeding
+        if "kwark" in text_lower:
+            kcal, eiwit, kh, vet = 300, 42, 20, 1  # Rijk aan eiwit
+            if "banaan" in text_lower:
+                kcal += 100; kh += 23
+        elif "kip" in text_lower and "rijst" in text_lower:
+            kcal, eiwit, kh, vet = 650, 45, 75, 12 # Typische clean meal
+        elif "wrap" in text_lower or "wraps" in text_lower:
+            kcal, eiwit, kh, vet = 550, 35, 50, 18
+        elif "lasagna" in text_lower:
+            kcal, eiwit, kh, vet = 750, 40, 65, 32
+        elif "tonijn" in text_lower:
+            kcal, eiwit, kh, vet = 350, 38, 5, 15
+        elif "shake" in text_lower or "whey" in text_lower:
+            kcal, eiwit, kh, vet = 200, 30, 3, 2
+        elif "ei" in text_lower or "eieren" in text_lower:
+            kcal, eiwit, kh, vet = 320, 24, 2, 22
+            
+        nieuwe_maaltijd = {
+            "Type": gekozen_type, 
+            "Omschrijving": ai_input, 
+            "Kcal": int(kcal),
+            "Eiwit": int(eiwit),
+            "Kh": int(kh),
+            "Vet": int(vet)
+        }
         week_data["maaltijden_lijst"][gekozen_dag].append(nieuwe_maaltijd)
-        st.success(f"Toegevoegd als **{gekozen_type}** met naar schatting **{geschatte_kcal} kcal**!")
+        st.success(f"Toegevoegd! Geschat: {kcal} kcal | {eiwit}g Eiwit | {kh}g Koolhydraten | {vet}g Vet")
         st.rerun()
 
     # --- MAALTIJDEN OVERZICHT PER DAG ---
     st.write("### 📋 Log van vandaag")
     huidige_maaltijden = week_data["maaltijden_lijst"][gekozen_dag]
     
-    tabel_kcal = 0
+    tabel_kcal, tabel_eiwit, tabel_kh, tabel_vet = 0, 0, 0, 0
+    
     if not huidige_maaltijden:
         st.caption("Nog geen maaltijden ingevoerd voor deze dag.")
     else:
-        # Loop door de maaltijden heen en toon ze met een verwijderknop
         for index, m in enumerate(huidige_maaltijden):
-            tabel_kcal += m["Kcal"]
+            # Fallback checks voor oude maaltijden die nog geen macro's hadden
+            m_kcal = m.get("Kcal", 0)
+            m_eiwit = m.get("Eiwit", 0)
+            m_kh = m.get("Kh", 0)
+            m_vet = m.get("Vet", 0)
+            
+            tabel_kcal += m_kcal
+            tabel_eiwit += m_eiwit
+            tabel_kh += m_kh
+            tabel_vet += m_vet
+            
             col_m1, col_m2 = st.columns([5, 1])
             with col_m1:
                 st.markdown(f"""
                 <div class="meal-card">
                     <div>
-                        <span class="meal-type">[{m['Type']}]</span> {m['Omschrijving']}
+                        <span class="meal-type">[{m.get('Type', 'Snack')}]</span> {m.get('Omschrijving', '')}
+                        <br><span class="macro-text">🧬 E: {m_eiwit}g | 🍞 K: {m_kh}g | 🥑 V: {m_vet}g</span>
                     </div>
-                    <div style="font-weight: bold; color: #4B5563;">{m['Kcal']} kcal</div>
+                    <div style="font-weight: bold; color: #4B5563;">{m_kcal} kcal</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_m2:
-                # Unieke knop per maaltijd om direct te kunnen wissen
                 if st.button("🗑️", key=f"del_{db_key}_{gekozen_dag}_{index}"):
                     week_data["maaltijden_lijst"][gekozen_dag].pop(index)
                     st.rerun()
 
+    # Wrap macro totals toevoegen indien aangevinkt
     wrap_kcal = 627 if week_data["wrap_check"][gekozen_dag] else 0
+    wrap_eiwit = 40 if week_data["wrap_check"][gekozen_dag] else 0
+    wrap_kh = 55 if week_data["wrap_check"][gekozen_dag] else 0
+    wrap_vet = 25 if week_data["wrap_check"][gekozen_dag] else 0
+    
     totaal_dag_kcal = int(tabel_kcal + wrap_kcal)
-    st.metric(label="🔥 Totaal kcal voor deze dag:", value=f"{totaal_dag_kcal} kcal")
-
-with tab1:
-    st.subheader(f"De Wekelijkse Balans ({geselecteerde_week_naam})")
+    totaal_dag_eiwit = int(tabel_eiwit + wrap_eiwit)
+    totaal_dag_kh = int(tabel_kh + wrap_kh)
+    totaal_dag_vet = int(tabel_vet + wrap_vet)
     
-    doordeweeks_buffer = (doel_tekort * 6) + extra_verbrand_totaal
-    netto_week_tekort = doordeweeks_buffer - cheat_overschot
-    geschat_vetverlies = netto_week_tekort / 7000
-    
-    col1, col2, col3 = st.columns(3)
-    with col1: st.metric("Totale Buffer (incl. sport)", f"-{doordeweeks_buffer} kcal")
-    with col2: st.metric("Weekend Overschot", f"+{cheat_overschot} kcal")
-    with col3: st.metric("Netto Weekresultaat", f"-{netto_week_tekort} kcal", delta=f"{geschat_vetverlies:.2f} kg vet/week")
-
-    st.markdown("### 🗓️ Weekoverzicht & Werkelijke Inname")
-    
-    kcal_doel_lijst = []
-    kcal_werkelijk_lijst = []
-    status_lijst = []
-    
-    for dag in dagen_van_de_week:
-        # Bereken dagtotaal uit de maaltijdenlijst
-        m_lijst = week_data["maaltijden_lijst"].get(dag, [])
-        tabel_kcal_dag = sum([m["Kcal"] for m in m_lijst])
-        wrap_kcal_dag = 627 if week_data["wrap_check"].get(dag, False) else 0
-        kcal_werkelijk_lijst.append(int(tabel_kcal_dag + wrap_kcal_dag))
-        
-        if dag == cheat_dag:
-            kcal_doel_lijst.append(totaal_cheat_kcal)
-            status_lijst.append("🍺 Cheatday")
-        else:
-            kcal_doel_lijst.append(doel_kcal)
-            status_lijst.append("⚡ Strak Tekort")
-            
-    df_week = pd.DataFrame({
-        "Dag": dagen_van_de_week,
-        "Doel Inname (kcal)": kcal_doel_lijst,
-        "Werkelijke Inname (kcal)": kcal_werkelijk_lijst,
-        "Status": status_lijst
-    })
-    st.dataframe(df_week, use_container_width=True)
+    # Prachtige macro metrics balk onderaan de dag
+    st.write("### 📊 Totaal
