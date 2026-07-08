@@ -139,6 +139,7 @@ max_week = huidige_week if geselecteerd_jaar == huidig_jaar else 52
 
 weken_lijst = []
 for w in range(max_week, 0, -1):
+    # HIER IS HET VERANDERD: 'huidige_week' in plaats van 'historische_week'
     if geselecteerd_jaar == huidig_jaar and w == huidige_week:
         weken_lijst.append(f"Week {w} (Huidige week)")
     else:
