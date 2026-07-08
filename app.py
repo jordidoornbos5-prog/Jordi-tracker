@@ -32,31 +32,49 @@ met_values = {
     "Voetbaltraining (Kelderklasse / Rustig)": 4.5
 }
 
+import streamlit as st
+import pandas as pd
+import datetime
+import json
+from sqlalchemy import text  # <-- NIEUW: Nodig voor SQLAlchemy 2.0+
+
+# ... (De rest van je custom styling en MET-waarden blijft gewoon hetzelfde)
+
 # --- PERMANENTE DATABASE FUNCTIES ---
-# We gebruiken SQL-connection van Streamlit om data permanent te bewaren in een SQLite bestand
 conn = st.connection("local_db", type="sql")
 
-# Maak de database tabel aan als deze nog niet bestaat
+# GECORRIGEERD: text() toegevoegd rondom de SQL queries
 with conn.session as session:
-    session.execute("""
+    session.execute(text("""
         CREATE TABLE IF NOT EXISTS tracker_data (
             key TEXT PRIMARY KEY,
             json_payload TEXT
         )
-    """)
+    """))
     session.commit()
 
 def load_all_data():
     """Haalt alle opgeslagen data op uit de permanente database"""
     try:
-        df = conn.query("SELECT * FROM tracker_data", ttl=0)
+        # GECORRIGEERD: text() toegevoegd voor de SELECT query
+        df = conn.query(text("SELECT * FROM tracker_data"), ttl=0)
         db_dict = {}
         for index, row in df.iterrows():
             db_dict[row['key']] = json.loads(row['json_payload'])
         return db_dict
-    except:
+    except Exception as e:
         return {}
 
+def save_week_data(key, data):
+    """Slaat de data van één specifieke week permanent op"""
+    json_string = json.dumps(data)
+    with conn.session as session:
+        # GECORRIGEERD: text() toegevoegd voor de INSERT query
+        session.execute(
+            text("INSERT OR REPLACE INTO tracker_data (key, json_payload) VALUES (:key, :json)"),
+            {"key": key, "json": json_string}
+        )
+        session.commit()
 def save_week_data(key, data):
     """Slaat de data van één specifieke week permanent op"""
     json_string = json.dumps(data)
