@@ -47,17 +47,20 @@ with conn.session as session:
     """))
     session.commit()
 
+# --- VERNIEUWDE DATABASE FUNCTIES ---
 def load_all_data():
+    """Laadt data uit SQLite en zet het in session_state."""
     try:
         df = conn.query(text("SELECT * FROM tracker_data"), ttl=0)
         db_dict = {}
-        for index, row in df.iterrows():
+        for _, row in df.iterrows():
             db_dict[row['key']] = json.loads(row['json_payload'])
         return db_dict
     except:
         return {}
 
 def save_week_data(key, data):
+    """Slaat data op in SQLite EN update direct de session_state."""
     json_string = json.dumps(data)
     with conn.session as session:
         session.execute(
@@ -65,6 +68,7 @@ def save_week_data(key, data):
             {"key": key, "json": json_string}
         )
         session.commit()
+    st.session_state['history_db'][key] = data
 
 if 'history_db' not in st.session_state:
     st.session_state['history_db'] = load_all_data()
