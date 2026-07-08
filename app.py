@@ -54,7 +54,7 @@ vandaag = datetime.date.today()
 huidig_jaar = vandaag.year
 huidige_week = vandaag.isocalendar()[1]
 
-# Jaar selecteren (keuze uit huidige jaar en vorig jaar)
+# Jaar selecteren
 geselecteerd_jaar = st.sidebar.selectbox("Kies Jaar:", [huidig_jaar, huidig_jaar - 1], index=0)
 
 # Bepaal tot welke week we mogen kijken
@@ -123,7 +123,4 @@ with tab3:
     
     # Haal opgeslagen data op of vul in
     week_data["voeding"][gekozen_dag] = st.text_area("Typ hier in normaal Nederlands wat je die dag op hebt:", value=week_data["voeding"][gekozen_dag], key=f"food_{db_key}_{gekozen_dag}")
-    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=week_data["wrap_check"][gekozen_dag], key=f"wrap_{db_key}_{gekozen_dag}")
-    
-    st.write("---")
-    base_kcal = 627 if week_data["wrap_check"]
+    week_data["wrap_check"][gekozen_dag] = st.checkbox("Ik had die dag mijn vaste Ei-Chorizo-Andalouse Wrap op (627 kcal)", value=
