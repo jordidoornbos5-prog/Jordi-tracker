@@ -70,7 +70,7 @@ def save_week_data(key, data):
         session.commit()
     # Directe update van de actieve sessie
     st.session_state['history_db'][key] = data
-
+st.cache_data.clear()
 if 'history_db' not in st.session_state:
     st.session_state['history_db'] = load_all_data()
 
